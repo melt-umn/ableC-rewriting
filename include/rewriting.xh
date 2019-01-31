@@ -1,0 +1,114 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <gc.h>
+
+#ifndef _REWRITING_XH
+#define _REWRITING_XH
+
+typedef unsigned long type_id;
+typedef closure<() -> void> generic_closure;
+
+typedef __attribute__((refId("edu:umn:cs:melt:exts:ableC:rewriting:strategy")))
+  datatype strategy *strategy;
+
+datatype strategy {
+  Fail();
+  Id();
+  Choice(strategy s1, strategy s2);
+  Seq(strategy s1, strategy s2);
+  Neg(strategy s);
+  One(strategy s);
+  All(strategy s);
+  Rec(closure<(strategy) -> strategy> f);
+  Rule(type_id id, generic_closure f);
+};
+
+template<a>
+_Bool rewrite(const strategy s, const a term, a *const result) {
+  match (s) {
+    &Fail() -> {
+      return 0;
+    }
+    &Id() -> {
+      if (result != NULL) {
+        *result = term;
+      }
+      return 1;
+    }
+    &Choice(s1, s2) -> {
+      return rewrite(s1, term, result) || rewrite(s2, term, result);
+    }
+    &Seq(s1, s2) -> {
+      return rewrite(s1, term, result) && rewrite(s2, term, result);
+    }
+    &Neg(s) -> {
+      return !rewrite(s, term, NULL);
+    }
+    &One(s) -> {
+      return _rewrite_one(s, term, result);
+    }
+    &All(s) -> {
+      return _rewrite_all(s, term, result);
+    }
+    &Rec(f) -> {
+      return rewrite(f(s), term, result);
+    }
+    &Rule(id, f) -> {
+      if (_type_id(a) == id) {
+        return ((closure<(a term, a *result) -> _Bool>)f)(term, result);
+      } else {
+        return 0;
+      }
+    }
+    _ -> {
+      printf(stderr, "Invalid strategy to rewrite: %p", s);
+      exit(1);
+    }
+  }
+}
+
+// Strategy construction helpers
+static datatype strategy fail[] = {{.tag = strategy_Fail}};
+static datatype strategy id[] = {{.tag = strategy_Id}};
+
+allocate datatype strategy with GC_malloc;
+static inline strategy neg(strategy s) { return GC_malloc_Neg(s); }
+static inline strategy one(strategy s) { return GC_malloc_One(s); }
+static inline strategy all(strategy s) { return GC_malloc_All(s); }
+static inline strategy rec(closure<(strategy) -> strategy> f) { return GC_malloc_Rec(f); }
+
+// Generally useful strategy constructors
+static inline strategy try(strategy s) {
+  return s <+ id;
+}
+
+static inline strategy repeat(strategy s) {
+  return rec(lambda (strategy self) -> try(s <* self));
+}
+
+static inline strategy bottomUp(strategy s) {
+  return rec(lambda (strategy self) -> all(self) <* s);
+}
+
+static inline strategy topDown(strategy s) {
+  return rec(lambda (strategy self) -> s <* all(self));
+}
+
+static inline strategy onceBottomUp(strategy s) {
+  return rec(lambda (strategy self) -> one(self) <+ s);
+}
+
+static inline strategy onceTopDown(strategy s) {
+  return rec(lambda (strategy self) -> s <+ one(self));
+}
+
+static inline strategy innermost(strategy s) {
+  return rec(lambda (strategy self) -> all(self) <* try(s <* self));
+}
+
+static inline strategy outermost(strategy s) {
+  return rec(lambda (strategy self) -> try(s <* self) <* all(self));
+}
+
+#endif
