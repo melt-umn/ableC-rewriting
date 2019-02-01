@@ -29,7 +29,7 @@ top::Expr ::= e1::Expr e2::Expr
   
   local localErrors::[Message] =
     e1.errors ++ e2.errors ++
-    checkRewritingHeaderDef("GC_malloc_Seq", top.location, top.env) ++
+    checkRewritingHeaderDef("GC_malloc_Sequence", top.location, top.env) ++
     checkStrategyType(e1.typerep, "<*", e1.location) ++
     checkStrategyType(e2.typerep, "<*", e2.location);
   
@@ -37,7 +37,7 @@ top::Expr ::= e1::Expr e2::Expr
   
   local fwrd::Expr =
     ableC_Expr {
-      GC_malloc_Seq($Expr{decExpr(e1, location=builtin)}, $Expr{decExpr(e2, location=builtin)})
+      GC_malloc_Sequence($Expr{decExpr(e1, location=builtin)}, $Expr{decExpr(e2, location=builtin)})
     };
   forwards to mkErrorCheck(localErrors, fwrd);
 }
@@ -48,31 +48,43 @@ top::Expr ::= ty::TypeName es::ExprClauses
   propagate substituted;
   top.pp = pp"rule (${ty.pp}) ${nestlines(2, es.pp)}";
   
-  local localErrors::[Message] = ty.errors ++ es.errors;
+  local localErrors::[Message] =
+    ty.errors ++ es.errors ++
+    if !typeAssignableTo(ty.typerep, es.typerep)
+    then [err(top.location, s"Rule has type ${showType(ty.typerep)} but rhs has type ${showType(es.typerep)}")]
+    else [];
   
   local typeIdDefs::Pair<Integer [Def]> = getTypeIdDefs(ty.typerep, addEnv(ty.defs, ty.env));
   
   es.env = addEnv(ty.defs ++ typeIdDefs.snd, ty.env);
   es.matchLocation = top.location;
   es.expectedTypes = [ty.typerep];
-  es.scrutineesIn = [ableC_Expr { _term }];
-  es.transformIn = ableC_Stmt { _success = false; };
+  es.transformIn = [ableC_Expr { _term }];
+  es.endLabelName = "_end"; -- Only one in the function, so no unique id
   
   local fwrd::Expr =
-    ableC_Expr {
-      GC_malloc_Rule(
-        $intLiteralExpr{typeIdDefs.fst},
-        lambda ($BaseTypeExpr{typeModifierTypeExpr(ty.bty, ty.mty)} _term,
-                $directTypeExpr{ty.typerep} *_result) -> _Bool {
-          _Bool _success = 1;
-          $directTypeExpr{ty.typerep} _match_result;
-          $Stmt{es.transform};
-          if (_success) {
-            *_result = _match_result;
-          }
-          return _success;
-        })
-    };
+    injectGlobalDeclsExpr(
+      foldDecl([defsDecl(typeIdDefs.snd)]),
+      ableC_Expr {
+        proto_typedef type_id;
+        GC_malloc_Rule(
+          $intLiteralExpr{typeIdDefs.fst},
+          ({closure<($BaseTypeExpr{typeModifierTypeExpr(ty.bty, ty.mty)},
+                     $directTypeExpr{ty.typerep}*) -> _Bool> _fn =
+              lambda ($directTypeExpr{ty.typerep} _term,
+                      $directTypeExpr{ty.typerep} *_result) -> _Bool {
+                $directTypeExpr{ty.typerep} _match_result;
+                $Stmt{es.transform};
+                return 0;
+                _end:
+                *_result = _match_result;
+                return 1;
+              };
+            *(struct generic_closure*)&_fn;}))
+      },
+      location=builtin);
+  
+  forwards to mkErrorCheck(localErrors, fwrd);
 }
 
 aspect function getInitialEnvDefs

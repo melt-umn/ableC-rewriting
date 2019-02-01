@@ -21,14 +21,16 @@ top::Type ::= quals::Qualifiers sub::Type
         ({$directTypeExpr{sub} *_result = 0;
           if ($Expr{e}) {
             _result = GC_malloc(sizeof($directTypeExpr{sub}));
-            *_result = $Expr{e};
+            *_result = *$Expr{e};
           }
           _result;})
       }; 
   top.componentRewriteProds =
     [\ strategy::Expr term::Expr result::Expr Location ->
        ableC_Expr {
-         $Expr{term}? rewrite($Expr{strategy}, *$Expr{term}, *$Expr{result}) : (_Bool)0
+         ({proto_typedef strategy;
+           template<a> _Bool rewrite(const strategy s, const a term, a *const result);
+           $Expr{term}? rewrite($Expr{strategy}, *$Expr{term}, *$Expr{result}) : (_Bool)0;})
        }];
 }
 

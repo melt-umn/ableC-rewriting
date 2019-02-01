@@ -62,7 +62,7 @@ Pair<Integer [Def]> ::= t::Type  e::Decorated Env
     case typeIds of
     | [] -> genInt()
     | [id] -> id
-    | _ -> error("Found multiple type id entires for " ++ showType(t))
+    | ids -> error(s"Found multiple type id entires for ${showType(t)}: ${hackUnparse(ids)}")
     end;
   
   return
