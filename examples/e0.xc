@@ -22,7 +22,7 @@ Expr *evalExpr(Expr *e) {
       Mul(&Const(1), &e2) -> e2;
       Div(&Const(0), _) -> Const(0);
       Div(&e1, &Const(1)) -> e1;
-
+      
       // Evaluate
       Add(&Const(a), &Const(b)) -> Const(a + b);
       Sub(&Const(a), &Const(b)) -> Const(a - b);

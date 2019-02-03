@@ -4,6 +4,7 @@ imports silver:langutil;
 
 imports edu:umn:cs:melt:ableC:concretesyntax;
 imports edu:umn:cs:melt:ableC:abstractsyntax:host;
+imports edu:umn:cs:melt:ableC:abstractsyntax:construction;
 
 imports edu:umn:cs:melt:exts:ableC:rewriting:abstractsyntax;
 
@@ -22,16 +23,22 @@ concrete productions top::AddMulLeftOp_c
   { top.ast = seqExpr(top.leftExpr, top.rightExpr, location=top.exprLocation); }
 
 -- Other special syntax
-marking terminal Visit_t  'rule'    lexer classes {Cidentifier}, font=font_all;
+marking terminal Action_t 'action'   lexer classes {Cidentifier}, font=font_all;
+marking terminal Rule_t   'rule'     lexer classes {Cidentifier}, font=font_all;
 marking terminal TypeId_t '_type_id' lexer classes {Cidentifier};
 
 aspect parser attribute context
   action {
-    context = addIdentsToScope([name("rule", location=builtin)], Visit_t, context);
+    context = addIdentsToScope([name("action", location=builtin)], Action_t, context);
+    context = addIdentsToScope([name("rule", location=builtin)], Rule_t, context);
     context = addIdentsToScope([name("_type_id", location=builtin)], TypeId_t, context);
   };
 
 concrete productions top::PrimaryExpr_c
+| 'action' '(' p::ParameterDeclaration_c ')' '{' s::BlockItemList_c '}'
+  {
+    top.ast = actionExpr(p.ast, foldStmt(s.ast), location=top.location);
+  }
 | 'rule' '(' ty::TypeName_c ')' '{' cs::ExprClauses_c '}'
   { top.ast = ruleExpr(ty.ast, cs.ast, location=top.location); }
 | '_type_id' LParen_t ty::TypeName_c ')'

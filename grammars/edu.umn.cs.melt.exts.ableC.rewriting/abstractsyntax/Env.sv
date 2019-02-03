@@ -61,8 +61,11 @@ Pair<Integer [Def]> ::= t::Type  e::Decorated Env
   local typeId::Integer =
     case typeIds of
     | [] -> genInt()
-    | [id] -> id
-    | ids -> error(s"Found multiple type id entires for ${showType(t)}: ${hackUnparse(ids)}")
+    -- TODO: Theoretically the id should only be in the environment once, but there is a bug
+    -- somewhere with lifting
+    --| [id] -> id
+    --| ids -> error(s"Found multiple type id entires for ${showType(t)}: ${hackUnparse(ids)}")
+    | id :: _ -> id
     end;
   
   return

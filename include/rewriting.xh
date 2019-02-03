@@ -25,6 +25,7 @@ datatype strategy {
   One(strategy s);
   All(strategy s);
   Rec(closure<(strategy) -> strategy> f);
+  Action(type_id id, struct generic_closure f);
   Rule(type_id id, struct generic_closure f);
 };
 
@@ -35,7 +36,7 @@ _Bool rewrite(const strategy s, const a term, a *const result) {
       return 0;
     }
     &Id() -> {
-      if (result != NULL) {
+      if (result) {
         *result = term;
       }
       return 1;
@@ -45,7 +46,7 @@ _Bool rewrite(const strategy s, const a term, a *const result) {
     }
     &Sequence(s1, s2) -> {
       a tmp;
-      return rewrite(s1, term, &tmp) && rewrite(s2, tmp, result);
+      return rewrite(s1, term, result? &tmp : NULL) && rewrite(s2, tmp, result);
     }
     &Neg(s) -> {
       return !rewrite(s, term, NULL);
@@ -58,6 +59,15 @@ _Bool rewrite(const strategy s, const a term, a *const result) {
     }
     &Rec(f) -> {
       return rewrite(f(s), term, result);
+    }
+    &Action(id, f) -> {
+      if (_type_id(a) == id) {
+        ((closure<(a term) -> void>){f.fn_name, f.env, f.fn})(term);
+      }
+      if (result) {
+        *result = term;
+      }
+      return 1;
     }
     &Rule(id, f) -> {
       if (_type_id(a) == id) {
