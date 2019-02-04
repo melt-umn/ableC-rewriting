@@ -119,11 +119,11 @@ static inline strategy onceTopDown(strategy s) {
 }
 
 static inline strategy innermost(strategy s) {
-  return rec(lambda (strategy self) -> all(self) <* try(s <* self));
+  return repeat(onceBottomUp(s));
 }
 
 static inline strategy outermost(strategy s) {
-  return rec(lambda (strategy self) -> try(s <* self) <* all(self));
+  return repeat(onceTopDown(s));
 }
 
 #endif

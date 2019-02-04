@@ -338,14 +338,19 @@ top::ParameterDecl ::= storage::StorageClasses  bty::BaseTypeExpr  mty::TypeModi
       },
       location=top.sourceLocation);
   top.componentRewriteTransform =
-    ableC_Expr {
-      inst rewrite<$directTypeExpr{mty.typerep}>(
-        $Expr{top.componentRewriteStrategy},
-        $Expr{top.componentRewriteTerm}.contents.$name{top.constructorName}.$Name{fieldName},
-        $Expr{top.componentRewriteResult}?
-          &($Expr{top.componentRewriteResult}->contents.$name{top.constructorName}.$Name{fieldName}) :
-          (void *)0)
-    };
+    if containsQualifier(constQualifier(location=builtin), mty.typerep)
+    then top.componentRewriteDefault
+    else
+      ableC_Expr {
+        ({proto_typedef strategy;
+          template<a> _Bool rewrite(const strategy s, const a term, a *const result);
+          rewrite(
+            $Expr{top.componentRewriteStrategy},
+            $Expr{top.componentRewriteTerm}.contents.$name{top.constructorName}.$Name{fieldName},
+            $Expr{top.componentRewriteResult}?
+              &($Expr{top.componentRewriteResult}->contents.$name{top.constructorName}.$Name{fieldName}) :
+              (void *)0);})
+      };
 }
 
 -- Check the given env for the given function name

@@ -19,24 +19,30 @@ aspect production pointerType
 top::Type ::= quals::Qualifiers sub::Type
 {
   top.shallowCopyProd =
-    \ e::Expr Location ->
-      ableC_Expr {
-        ({$directTypeExpr{sub} *_result = (void*)0;
-          if ($Expr{e}) {
-            _result = GC_malloc(sizeof($directTypeExpr{sub}));
-            *_result = *$Expr{e};
-          }
-          _result;})
-      }; 
+    if containsQualifier(constQualifier(location=builtin), sub)
+    then \ e::Expr Location -> e
+    else
+      \ e::Expr Location ->
+        ableC_Expr {
+          ({$directTypeExpr{sub} *_result = (void*)0;
+            if ($Expr{e}) {
+              _result = GC_malloc(sizeof($directTypeExpr{sub}));
+              *_result = *$Expr{e};
+            }
+            _result;})
+        };
   top.componentRewriteProd =
-    \ strategy::Expr term::Expr result::Expr Location ->
-      ableC_Expr {
-        ({proto_typedef strategy;
-          template<a> _Bool rewrite(const strategy s, const a term, a *const result);
-          $Expr{term}?
-            rewrite($Expr{strategy}, *$Expr{term}, $Expr{result}? *$Expr{result} : (void*)0) :
-            $Expr{top.componentRewriteDefault};})
-      };
+    if containsQualifier(constQualifier(location=builtin), sub)
+    then \ Expr Expr Expr Location -> top.componentRewriteDefault
+    else
+      \ strategy::Expr term::Expr result::Expr Location ->
+        ableC_Expr {
+          ({proto_typedef strategy;
+            template<a> _Bool rewrite(const strategy s, const a term, a *const result);
+            $Expr{term}?
+              rewrite($Expr{strategy}, *$Expr{term}, $Expr{result}? *$Expr{result} : (void*)0) :
+              $Expr{top.componentRewriteDefault};})
+        };
 }
 
 aspect production extType
