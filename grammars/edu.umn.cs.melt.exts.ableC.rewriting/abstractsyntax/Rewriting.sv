@@ -373,8 +373,9 @@ function checkStrategyType
     | _ -> nothing()
     end;
   return
-    case maybeRefId of
-    | just("edu:umn:cs:melt:exts:ableC:rewriting:strategy") -> []
-    | _ -> [err(loc, s"Operand to ${op} expected strategy type (got ${showType(t)})")]
+    case t, maybeRefId of
+    | errorType(), _ -> []
+    | _, just("edu:umn:cs:melt:exts:ableC:rewriting:strategy") -> []
+    | _, _ -> [err(loc, s"Operand to ${op} expected strategy type (got ${showType(t)})")]
     end;
 }

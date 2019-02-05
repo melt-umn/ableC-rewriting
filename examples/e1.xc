@@ -10,6 +10,7 @@ datatype Set {
 };
 
 template allocate datatype Set with GC_malloc;
+
 template<a>
 bool setContains(int (*cmp)(a, a), Set<a> *set, a item) {
   match (set) {
