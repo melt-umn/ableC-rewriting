@@ -331,12 +331,6 @@ top::Parameters ::=
 aspect production parameterDecl
 top::ParameterDecl ::= storage::StorageClasses  bty::BaseTypeExpr  mty::TypeModifierExpr  n::MaybeName  attrs::Attributes
 {
-  local fieldAccess::Expr =
-    parenExpr(
-      ableC_Expr {
-        $Expr{top.componentRewriteResult}.contents.$name{top.constructorName}.$Name{fieldName}
-      },
-      location=top.sourceLocation);
   top.componentRewriteTransform =
     if containsQualifier(constQualifier(location=builtin), mty.typerep)
     then top.componentRewriteDefault
