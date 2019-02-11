@@ -59,9 +59,90 @@ top::ExtType ::=
   top.componentRewriteProd = \ Expr Expr Expr Location -> top.componentRewriteDefault;
 }
 
+aspect production refIdExtType
+top::ExtType ::= kwd::StructOrEnumOrUnion  n::String  refId::String
+{
+  top.componentRewriteProd =
+    case kwd of
+    | structSEU() ->
+      rewriteStruct(top.componentRewriteCombineProd, top.componentRewriteDefault, _, _, _, location=_)
+    | _ -> \ Expr Expr Expr Location -> top.componentRewriteDefault
+    end;
+}
+
 aspect production adtExtType
 top::ExtType ::= adtName::String adtDeclName::String refId::String
 {
   top.componentRewriteProd =
     rewriteADT(top.componentRewriteCombineProd, top.componentRewriteDefault, _, _, _, location=_);
+}
+
+aspect production varType
+top::ExtType ::= sub::Type
+{
+  top.shallowCopyProd =
+    if containsQualifier(constQualifier(location=builtin), sub)
+    then \ e::Expr Location -> e
+    else
+      \ e::Expr Location ->
+        ableC_Expr {
+          ({template<a> _Bool is_bound();
+            template<a> _Bool value();
+            is_bound($Expr{e})?
+              $Expr{
+                boundVarExpr(
+                  ableC_Expr { value($Expr{e}) },
+                  ableC_Expr { GC_malloc },
+                  location=builtin)} :
+              $Expr{
+                freeVarExpr(
+                  typeName(directTypeExpr(sub), baseTypeExpr()),
+                  ableC_Expr { GC_malloc },
+                  location=builtin)};})
+        };
+  top.componentRewriteProd =
+    if containsQualifier(constQualifier(location=builtin), sub)
+    then \ Expr Expr Expr Location -> top.componentRewriteDefault
+    else
+      \ strategy::Expr term::Expr result::Expr Location ->
+        ableC_Expr {
+          ({proto_typedef strategy;
+            template<a> _Bool rewrite(const strategy s, const a term, a *const result);
+            template<a> struct _var_d;
+            template<a> _Bool is_bound();
+            template<a> _Bool value();
+            is_bound($Expr{term})?
+              rewrite(
+                $Expr{strategy},
+                value($Expr{term}),
+                $Expr{result}?
+                  &(((_var_d<$directTypeExpr{sub}> *)$Expr{result})->contents._Bound.val) :
+                  (void*)0) :
+              $Expr{top.componentRewriteDefault};})
+        };
+}
+
+aspect production listType
+top::ExtType ::= sub::Type
+{
+  top.componentRewriteProd =
+    if containsQualifier(constQualifier(location=builtin), sub)
+    then \ Expr Expr Expr Location -> top.componentRewriteDefault
+    else
+      \ strategy::Expr term::Expr result::Expr Location ->
+        ableC_Expr {
+          ({proto_typedef strategy;
+            template<a> _Bool rewrite(const strategy s, const a term, a *const result);
+            $Expr{term}.tag == _list_d__Nil?
+              $Expr{top.componentRewriteDefault} :
+              $Expr{
+                top.componentRewriteCombineProd(
+                  ableC_Expr {
+                    rewrite($Expr{strategy}, $Expr{term}.contents._Cons.head, &($Expr{result}->contents._Cons.head))
+                  },
+                  ableC_Expr {
+                    rewrite($Expr{strategy}, $Expr{term}.contents._Cons.tail, &($Expr{result}->contents._Cons.tail))
+                  },
+                  builtin)};})
+        };
 }

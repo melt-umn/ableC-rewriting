@@ -230,6 +230,141 @@ autocopy attribute componentRewriteResult::Expr;
 synthesized attribute componentRewriteTransform::Expr;
 inherited attribute componentRewriteTransformIn::Expr;
 
+abstract production rewriteStruct
+top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strategy::Expr term::Expr result::Expr
+{
+  propagate substituted;
+  top.pp = pp"rewriteADT(${strategy.pp}, ${term.pp}, ${result.pp})";
+  
+  local structLookup::[RefIdItem] =
+    case term.typerep.maybeRefId of
+    | just(rid) -> lookupRefId(rid, top.env)
+    | nothing() -> []
+    end;
+  
+  local struct::Decorated StructDecl =
+    case structLookup of
+    | structRefIdItem(s) :: _ -> s
+    end;
+  local newStruct::StructDecl = new(struct);
+  newStruct.isLast = struct.isLast;
+  newStruct.env = struct.env;
+  newStruct.returnType = struct.returnType;
+  newStruct.givenRefId = just(struct.refId);
+  newStruct.componentRewriteCombineProd = combineProd;
+  newStruct.componentRewriteDefault = defaultVal;
+  newStruct.componentRewriteStrategy = strategy;
+  newStruct.componentRewriteTerm = term;
+  newStruct.componentRewriteResult = result;
+  
+  local localErrors::[Message] =
+    case term.typerep, structLookup of
+    | errorType(), _ -> []
+    -- Check that this struct has a definition
+    | extType(_, refIdExtType(_, id, _)), [] ->
+      [err(top.location, s"struct ${id} does not have a definition.")]
+    | _, _ -> []
+    end ++
+    checkRewritingHeaderDef(top.location, top.env);
+  local fwrd::Expr = newStruct.componentRewriteTransform;
+  forwards to mkErrorCheck(localErrors, fwrd);
+}
+
+attribute componentRewriteCombineProd occurs on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
+attribute componentRewriteDefault occurs on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
+attribute componentRewriteStrategy occurs on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
+attribute componentRewriteTerm occurs on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
+attribute componentRewriteResult occurs on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
+attribute componentRewriteTransform occurs on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
+
+aspect production structDecl
+top::StructDecl ::= attrs::Attributes  name::MaybeName  dcls::StructItemList
+{
+  top.componentRewriteTransform = dcls.componentRewriteTransform;
+}
+
+aspect production consStructItem
+top::StructItemList ::= h::StructItem  t::StructItemList
+{
+  top.componentRewriteTransform = 
+    top.componentRewriteCombineProd(
+      h.componentRewriteTransform, t.componentRewriteTransform, builtin);
+}
+aspect production nilStructItem
+top::StructItemList ::=
+{
+  top.componentRewriteTransform = top.componentRewriteDefault;
+}
+
+aspect production structItem
+top::StructItem ::= attrs::Attributes  ty::BaseTypeExpr  dcls::StructDeclarators
+{
+  top.componentRewriteTransform = dcls.componentRewriteTransform;
+}
+aspect production structItems
+top::StructItem ::= dcls::StructItemList
+{
+  top.componentRewriteTransform = dcls.componentRewriteTransform;
+}
+aspect production anonStructStructItem
+top::StructItem ::= d::StructDecl
+{
+  top.componentRewriteTransform = d.componentRewriteTransform;
+}
+aspect production anonUnionStructItem
+top::StructItem ::= d::UnionDecl
+{
+  top.componentRewriteTransform = top.componentRewriteDefault;
+}
+aspect production warnStructItem
+top::StructItem ::= msg::[Message]
+{
+  top.componentRewriteTransform = top.componentRewriteDefault;
+}
+
+aspect production consStructDeclarator
+top::StructDeclarators ::= h::StructDeclarator  t::StructDeclarators
+{
+  top.componentRewriteTransform = 
+    top.componentRewriteCombineProd(
+      h.componentRewriteTransform, t.componentRewriteTransform, h.sourceLocation);
+}
+aspect production nilStructDeclarator
+top::StructDeclarators ::=
+{
+  top.componentRewriteTransform = top.componentRewriteDefault;
+}
+
+aspect production structField
+top::StructDeclarator ::= name::Name  ty::TypeModifierExpr  attrs::Attributes
+{
+  top.componentRewriteTransform =
+    if containsQualifier(constQualifier(location=builtin), ty.typerep)
+    then top.componentRewriteDefault
+    else
+      ableC_Expr {
+        ({proto_typedef strategy;
+          template<a> _Bool rewrite(const strategy s, const a term, a *const result);
+          rewrite(
+            $Expr{top.componentRewriteStrategy},
+            $Expr{top.componentRewriteTerm}.$Name{name},
+            $Expr{top.componentRewriteResult}?
+              &($Expr{top.componentRewriteResult}->$Name{name}) :
+              (void *)0);})
+      };
+}
+aspect production structBitfield
+top::StructDeclarator ::= name::MaybeName  ty::TypeModifierExpr  e::Expr  attrs::Attributes
+{
+  -- Just ignore bitfields for now
+  top.componentRewriteTransform = top.componentRewriteDefault;
+}
+aspect production warnStructField
+top::StructDeclarator ::= msg::[Message]
+{
+  top.componentRewriteTransform = top.componentRewriteDefault;
+}
+
 abstract production rewriteADT
 top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strategy::Expr term::Expr result::Expr
 {
@@ -294,7 +429,6 @@ top::ConstructorList ::= c::Constructor cl::ConstructorList
   top.componentRewriteTransform = c.componentRewriteTransform;
   c.componentRewriteTransformIn = cl.componentRewriteTransform;
 }
-
 aspect production nilConstructor
 top::ConstructorList ::=
 {
@@ -317,9 +451,7 @@ top::Parameters ::= h::ParameterDecl t::Parameters
 {
   top.componentRewriteTransform =
     top.componentRewriteCombineProd(
-      h.componentRewriteTransform,
-      t.componentRewriteTransform,
-      h.sourceLocation);
+      h.componentRewriteTransform, t.componentRewriteTransform, h.sourceLocation);
 }
 
 aspect production nilParameters
