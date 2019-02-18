@@ -56,7 +56,14 @@ top::Expr ::= p::ParameterDecl s::Stmt
   
   p.env = openScopeEnv(top.env);
   p.position = 0;
-  s.env = addEnv(globalDefsDef(typeIdDefs.snd) :: p.defs ++ p.functionDefs ++ s.functionDefs, capturedEnv(top.env));
+  
+  local fnTypeExpr::BaseTypeExpr =
+    ableC_BaseTypeExpr { closure<($directTypeExpr{p.typerep}) -> void> };
+  fnTypeExpr.env = addEnv(p.defs, p.env);
+  fnTypeExpr.returnType = nothing();
+  fnTypeExpr.givenRefId = nothing();
+  
+  s.env = addEnv(globalDefsDef(typeIdDefs.snd) :: fnTypeExpr.defs ++ p.functionDefs ++ s.functionDefs, capturedEnv(top.env));
   s.returnType = nothing();
   
   local fwrd::Expr =
@@ -66,7 +73,7 @@ top::Expr ::= p::ParameterDecl s::Stmt
         proto_typedef type_id;
         GC_malloc_Action(
           $intLiteralExpr{typeIdDefs.fst},
-          ({closure<($Parameters{foldParameterDecl([p])}) -> void> _fn =
+          ({$BaseTypeExpr{decTypeExpr(fnTypeExpr)} _fn =
               lambda (
                 $Parameters{foldParameterDecl([
                   parameterDecl(
@@ -103,7 +110,23 @@ top::Expr ::= ty::TypeName es::ExprClauses
   
   local typeIdDefs::Pair<Integer [Def]> = getTypeIdDefs(ty.typerep, addEnv(ty.defs, ty.env));
   
-  es.env = addEnv(globalDefsDef(typeIdDefs.snd) :: ty.defs, ty.env);
+  local fnTypeExpr::BaseTypeExpr =
+    ableC_BaseTypeExpr {
+      closure<($BaseTypeExpr{typeModifierTypeExpr(ty.bty, ty.mty)} _term,
+               $directTypeExpr{ty.typerep} *_result) -> _Bool>
+    };
+  fnTypeExpr.env = openScopeEnv(top.env);
+  fnTypeExpr.returnType = nothing();
+  fnTypeExpr.givenRefId = nothing();
+  
+  es.env =
+    addEnv(
+      globalDefsDef(typeIdDefs.snd) ::
+      fnTypeExpr.defs ++
+      case fnTypeExpr of
+      | closureTypeExpr(_, ps, _) -> ps.functionDefs
+      end,
+      fnTypeExpr.env);
   es.matchLocation = top.location;
   es.expectedTypes = [ty.typerep];
   es.transformIn = [ableC_Expr { _term }];
@@ -116,8 +139,7 @@ top::Expr ::= ty::TypeName es::ExprClauses
         proto_typedef type_id;
         GC_malloc_Rule(
           $intLiteralExpr{typeIdDefs.fst},
-          ({closure<($BaseTypeExpr{typeModifierTypeExpr(ty.bty, ty.mty)},
-                     $directTypeExpr{ty.typerep}*) -> _Bool> _fn =
+          ({$BaseTypeExpr{decTypeExpr(fnTypeExpr)} _fn =
               lambda ($directTypeExpr{ty.typerep} _term,
                       $directTypeExpr{ty.typerep} *_result) -> _Bool {
                 $directTypeExpr{ty.typerep} _match_result;

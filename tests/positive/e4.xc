@@ -23,6 +23,8 @@ strategy compress(void) {
     });
 }
 
+
+
 int main() {
   list<item<int> ?> ?l1, ?l2;
   if (!rewrite(compress<int>(), newlist(GC_malloc)[entry(1), entry(1), entry(2), entry(3), entry(3)], &l1)) {
@@ -34,8 +36,7 @@ int main() {
   }
   printf("%s\n", show(l2).text);
 
-  /*
-  if (!query A is l1, B is l2, append(A, B, C) {
+  if (!query A is l1, B is l2, append<item<int>>(A, B, C) {
       list<item<int> ?> ?l3;
       if (!rewrite(compress<int>(), C, &l3)) {
         return false;
@@ -43,11 +44,10 @@ int main() {
       printf("%s\n", show(l3).text);
       
       
-      
       return true;
     }) {
     return 3;
-    }*/
+  }
 
   return 0;
 }

@@ -110,13 +110,13 @@ top::ExtType ::= sub::Type
             template<a> _Bool rewrite(const strategy s, const a term, a *const result);
             template<a> struct _var_d;
             template<a> _Bool is_bound();
-            template<a> _Bool value();
+            template<a> a value();
             is_bound($Expr{term})?
               rewrite(
                 $Expr{strategy},
                 value($Expr{term}),
                 $Expr{result}?
-                  &(((_var_d<$directTypeExpr{sub}> *)$Expr{result})->contents._Bound.val) :
+                  &(((_var_d<$directTypeExpr{sub}> *)*$Expr{result})->contents._Bound.val) :
                   (void*)0) :
               $Expr{top.componentRewriteDefault};})
         };
@@ -138,10 +138,20 @@ top::ExtType ::= sub::Type
               $Expr{
                 top.componentRewriteCombineProd(
                   ableC_Expr {
-                    rewrite($Expr{strategy}, $Expr{term}.contents._Cons.head, &($Expr{result}->contents._Cons.head))
+                    rewrite(
+                      $Expr{strategy},
+                      $Expr{term}.contents._Cons.head,
+                      $Expr{result}?
+                        &($Expr{result}->contents._Cons.head) :
+                        (void *)0)
                   },
                   ableC_Expr {
-                    rewrite($Expr{strategy}, $Expr{term}.contents._Cons.tail, &($Expr{result}->contents._Cons.tail))
+                    rewrite(
+                      $Expr{strategy},
+                      $Expr{term}.contents._Cons.tail,
+                      $Expr{result}?
+                        &($Expr{result}->contents._Cons.tail) :
+                        (void *)0)
                   },
                   builtin)};})
         };
