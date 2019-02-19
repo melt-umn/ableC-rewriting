@@ -38,19 +38,28 @@ Expr *evalExpr(Expr *e) {
 }
 
 int main() {
-  Expr *exprs[] = {GC_malloc_Add(GC_malloc_Const(1), GC_malloc_Const(2)),
-                   GC_malloc_Add(GC_malloc_Const(3), GC_malloc_Mul(GC_malloc_Const(2), GC_malloc_Const(4))),
-                   GC_malloc_Sub(GC_malloc_Const(7), GC_malloc_Div(GC_malloc_Const(6), GC_malloc_Const(7))),
-                   GC_malloc_Mul(GC_malloc_Const(7), GC_malloc_Div(GC_malloc_Const(7), GC_malloc_Const(0))),
-                   GC_malloc_Mul(GC_malloc_Const(1), GC_malloc_Div(GC_malloc_Const(7), GC_malloc_Const(0))),
-                   GC_malloc_Mul(GC_malloc_Const(1), GC_malloc_Add(GC_malloc_Div(GC_malloc_Const(7), GC_malloc_Const(1)), GC_malloc_Const(4)))};
+  Expr *exprs[] = {
+    GC_malloc_Add(GC_malloc_Const(1), GC_malloc_Const(2)),
+    GC_malloc_Add(GC_malloc_Const(3), GC_malloc_Mul(GC_malloc_Const(2), GC_malloc_Const(4))),
+    GC_malloc_Sub(GC_malloc_Const(7), GC_malloc_Div(GC_malloc_Const(6), GC_malloc_Const(7))),
+    GC_malloc_Mul(GC_malloc_Const(7), GC_malloc_Div(GC_malloc_Const(7), GC_malloc_Const(0))),
+    GC_malloc_Mul(GC_malloc_Const(1), GC_malloc_Div(GC_malloc_Const(7), GC_malloc_Const(0))),
+    GC_malloc_Mul(GC_malloc_Const(1), GC_malloc_Add(GC_malloc_Div(GC_malloc_Const(7), GC_malloc_Const(1)), GC_malloc_Const(4)))
+  };
+  Expr *expected[] = {
+    GC_malloc_Const(3),
+    GC_malloc_Const(11),
+    GC_malloc_Const(7),
+    GC_malloc_Mul(GC_malloc_Const(7), GC_malloc_Div(GC_malloc_Const(7), GC_malloc_Const(0))),
+    GC_malloc_Div(GC_malloc_Const(7), GC_malloc_Const(0)),
+    GC_malloc_Const(11)
+  };
   for (int i = 0; i < sizeof(exprs) / sizeof(Expr*); i++) {
     printf("%s: ", show(exprs[i]).text);
     Expr *res = evalExpr(exprs[i]);
-    if (res != NULL)
-      printf("%s", show(res).text);
-    else 
-      printf("Fail");
-    printf("\n");
+    printf("%s\n", show(res).text);
+    if (show(res) != show(expected[i])) {
+      return i + 1;
+    }
   }
 }

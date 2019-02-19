@@ -1,4 +1,5 @@
 #include <rewriting.xh>
+#include <string.xh>
 #include <stdio.h>
 #include <stdbool.h>
 #include <alloca.h>
@@ -154,50 +155,33 @@ Term *normalize(Term *term) {
   return result;
 }
 
-void printTerm(Term *term) {
+string showTerm(Term *term) {
   match (term) {
     &Lambda(n, e) -> {
-      char params[100];
-      strcpy(params, n);
+      string params = str(n);
       bool matched = true;
       while (matched) {
-        match(e) {
+        match (e) {
           &Lambda(n, e1) -> {
-            strcat(params, " ");
-            strcat(params, n);
+            params += " ";
+            params += n;
             e = e1;
           }
           _ -> { matched = false; }
         }
       }
-      printf("\\%s. ", params);
-      printTerm(e);
+      return "\\" + params + ". " + showTerm(e);
     }
     &Apply(e1, e2) -> {
-      match(e1) {
-        &Lambda(_, _) -> {
-          printf("(");
-          printTerm(e1);
-          printf(")");
-        }
-        _ -> { printTerm(e1); }
-      }
-      printf(" ");
-      match(e2) {
-        &Lambda(_, _) -> {
-          printf("(");
-          printTerm(e2);
-          printf(")");
-        }
-        &Apply(_, _) -> {
-          printf("(");
-          printTerm(e2);
-          printf(")");
-        }
-        _-> { printTerm(e2); }
-      }
+      return match(e1)
+        (&Lambda(_, _) -> "(" + showTerm(e1) + ")";
+         _ -> showTerm(e1);) +
+        " " + match(e2)
+        (&Lambda(_, _) -> "(" + showTerm(e2) + ")";
+         &Apply(_, _) -> "(" + showTerm(e2) + ")";
+         _-> showTerm(e2););
     }
-    &Var(n) -> { printf("%s", n); }
+    &Var(n) -> { return str(n); }
   }
 }
 
@@ -212,20 +196,35 @@ int main() {
   Term *two = alloca_Apply(succ, one);
   Term *three = alloca_Apply(succ, two);
   
-  Term *terms[] = {alloca_Apply(alloca_Lambda("foo", alloca_Var("foo")), alloca_Lambda("a", alloca_Var("a"))),
-                   alloca_Apply(alloca_Lambda("a", alloca_Lambda("b", alloca_Var("a"))), alloca_Var("b")),
-                   alloca_Lambda("a", alloca_Lambda("b", alloca_Apply(alloca_Lambda("a", alloca_Var("b")), alloca_Var("a")))),
-                   plus,
-                   zero, one, two, three,
-                   alloca_Apply(alloca_Apply(plus, two), three)};
+  Term *terms[] = {
+    alloca_Apply(alloca_Lambda("foo", alloca_Var("foo")), alloca_Lambda("a", alloca_Var("a"))),
+    alloca_Apply(alloca_Lambda("a", alloca_Lambda("b", alloca_Var("a"))), alloca_Var("b")),
+    alloca_Lambda("a", alloca_Lambda("b", alloca_Apply(alloca_Lambda("a", alloca_Var("b")), alloca_Var("a")))),
+    plus,
+    zero, one, two, three,
+    alloca_Apply(alloca_Apply(plus, two), three)
+  };
+  const char *expected[] = {
+    "\\a. a",
+    "\\_0. b",
+    "\\a b. b",
+    "\\m n f x. m f (n f x)",
+    "\\f x. x",
+    "\\f x. f x",
+    "\\f x. f (f x)",
+    "\\f x. f (f (f x))",
+    "\\f x. f (f (f (f (f x))))"
+  };
   for (int i = 0; i < sizeof(terms) / sizeof(Term*); i++) {
-    printTerm(terms[i]);
-    printf(": ");
+    printf("%s: ", showTerm(terms[i]).text);
     Term *res = normalize(terms[i]);
-    if (res != NULL)
-      printTerm(res);
-    else 
-      printf("Fail");
-    printf("\n");
+    if (res != NULL) {
+      printf("%s\n", showTerm(res).text);
+      if (showTerm(res) != expected[i]) {
+        return i + 1;
+      }
+    } else {
+      return i + 1;
+    }
   }
 }

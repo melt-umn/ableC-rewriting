@@ -147,7 +147,7 @@ List<Stmt> *substituteStmtList(List<Stmt> *s, const char *n, Value v) {
      &Nil() -> s;);
 }
 
-void evaluate(List<Stmt> *prog) {
+string evaluate(List<Stmt> *prog) {
   strategy eval = outermost(rule (List<Stmt> *) {
         &Cons(Assign(n, e), s) @when(!stmtListHasFreeVar(n, s)) -> s;
         &Cons(a@Assign(n, Const(v)), s) -> substituteStmtList(s, n, v);
@@ -184,12 +184,15 @@ void evaluate(List<Stmt> *prog) {
   List<Stmt> *result;
   if (!rewrite(eval, prog, &result)) {
     printf("Fail\n");
+    return str("fail");
   } else match (result) {
     &Cons(Print(Const(String(a))), &Nil()) -> {
       printf("Output:\n%s\n", a);
+      return str(a);
     }
     _ -> {
       printf("Result: %s\n", show(result).text);
+      return show(result);
     }
   }
 }
@@ -214,9 +217,19 @@ int main() {
                                           Assign("a", Var("b")),
                                           Assign("b", Var("c")),
                                           Assign("n", Sub(GC_malloc_Var("n"), GC_malloc_Const(Int(1))))))),
-    buildList<Stmt>(2, Print(Var("x")), Assign("y", Const(Int(2))))};
+    buildList<Stmt>(2, Print(Var("x")), Assign("y", Const(Int(2))))
+  };
+  const char *expected[] = {
+    "Hello, world!",
+    "0\n1\n2\n3\n4\n5\n6\n7\n8\n9",
+    "0\n1\n1\n2\n3\n5\n8\n13\n21\n34",
+    "&Cons(Print(Var(\"x\")), &Nil())"
+  };
   for (int i = 0; i < sizeof(progs) / sizeof(Stmt*); i++) {
     printf("%s\n", show(progs[i]).text);
-    evaluate(progs[i]);
+    string res = evaluate(progs[i]);
+    if (res != expected[i]) {
+      return i + 1;
+    }
   }
 }

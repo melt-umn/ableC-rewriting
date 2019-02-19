@@ -23,30 +23,59 @@ strategy compress(void) {
     });
 }
 
-
+template<a>
+strategy decompress(void) {
+  return innermost(rule (list<item<a> ?> ?) {
+      ?&[?&{v, c} | t] @ when(c > 1) ->
+        newlist(GC_malloc)[boundvar((item<a>){v, 1}, GC_malloc),
+                           boundvar((item<a>){v, c - 1}, GC_malloc) | t];
+    });
+}
 
 int main() {
-  list<item<int> ?> ?l1, ?l2;
-  if (!rewrite(compress<int>(), newlist(GC_malloc)[entry(1), entry(1), entry(2), entry(3), entry(3)], &l1)) {
-    return 1;
-  }
+  // Construct list
+  list<item<int> ?> ?l1 = newlist(GC_malloc)[entry(1), entry(1), entry(2), entry(3), entry(3), entry(3)];
   printf("%s\n", show(l1).text);
-  if (!rewrite(compress<int>(), newlist(GC_malloc)[entry(3), entry(4), entry(5), entry(1), entry(1)], &l2)) {
+  match (l1) {
+    ?&[?&{1, 1}, ?&{1, 1}, ?&{2, 1}, ?&{3, 1}, ?&{3, 1}, ?&{3, 1}] -> {}
+    _ -> { return 1; }
+  }
+
+  // Compress list
+  list<item<int> ?> ?l2, ?l3;
+  if (!rewrite(compress<int>(), l1, &l2)) {
     return 2;
   }
   printf("%s\n", show(l2).text);
+  match (l2) {
+    ?&[?&{1, 2}, ?&{2, 1}, ?&{3, 3}] -> {}
+    _ -> { return 3; }
+  }
 
-  if (!query A is l1, B is l2, append<item<int>>(A, B, C) {
-      list<item<int> ?> ?l3;
-      if (!rewrite(compress<int>(), C, &l3)) {
+  // Decompress list
+  if (!rewrite(decompress<int>(), l1, &l3)) {
+    return 4;
+  }
+  printf("%s\n", show(l3).text);
+  match (l3) {
+    ?&[?&{1, 1}, ?&{1, 1}, ?&{2, 1}, ?&{3, 1}, ?&{3, 1}, ?&{3, 1}] -> {}
+    _ -> { return 5; }
+  }
+
+  // Reverse and decompress list
+  if (!query A is l1, reverse(A, B) {
+      list<item<int> ?> ?l4;
+      if (!rewrite(decompress<int>(), B, &l4)) {
         return false;
       }
-      printf("%s\n", show(l3).text);
-      
-      
+      printf("%s\n", show(l4).text);
+      match (l4) {
+        ?&[?&{3, 1}, ?&{3, 1}, ?&{3, 1}, ?&{2, 1}, ?&{1, 1}, ?&{1, 1}] -> {}
+        _ -> { return false; }
+      }
       return true;
     }) {
-    return 3;
+    return 6;
   }
 
   return 0;

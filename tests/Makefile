@@ -35,7 +35,7 @@ XC_INCLUDE_SOURCES=$(foreach dir,$(XC_INCLUDE_DIRS),$(wildcard $(dir)/*.*h))
 # Flags passed to ableC including the appropriate directories
 override XCFLAGS+=$(addprefix -I,$(XC_INCLUDE_DIRS))
 # Flags passed to Java when invoking ableC
-override JAVAFLAGS+=-Xss6M
+override JAVAFLAGS+=-Xss10M
 
 # Flags passed to the C compiler, e.g. to enable various compiler extensions
 override CFLAGS+=-g
