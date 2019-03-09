@@ -38,7 +38,7 @@ top::Type ::= quals::Qualifiers sub::Type
       \ strategy::Expr term::Expr result::Expr Location ->
         ableC_Expr {
           ({proto_typedef strategy;
-            template<a> _Bool rewrite(const strategy s, const a term, a *const result);
+            template<typename a> _Bool rewrite(const strategy s, const a term, a *const result);
             $Expr{term}?
               rewrite($Expr{strategy}, *$Expr{term}, $Expr{result}? *$Expr{result} : (void*)0) :
               $Expr{top.componentRewriteDefault};})
@@ -86,8 +86,8 @@ top::ExtType ::= sub::Type
     else
       \ e::Expr Location ->
         ableC_Expr {
-          ({template<a> _Bool is_bound();
-            template<a> _Bool value();
+          ({template<typename a> _Bool is_bound();
+            template<typename a> _Bool value();
             is_bound($Expr{e})?
               $Expr{
                 boundVarExpr(
@@ -107,10 +107,10 @@ top::ExtType ::= sub::Type
       \ strategy::Expr term::Expr result::Expr Location ->
         ableC_Expr {
           ({proto_typedef strategy;
-            template<a> _Bool rewrite(const strategy s, const a term, a *const result);
-            template<a> struct _var_d;
-            template<a> _Bool is_bound();
-            template<a> a value();
+            template<typename a> _Bool rewrite(const strategy s, const a term, a *const result);
+            template<typename a> struct _var_d;
+            template<typename a> _Bool is_bound();
+            template<typename a> a value();
             is_bound($Expr{term})?
               rewrite(
                 $Expr{strategy},
@@ -132,7 +132,7 @@ top::ExtType ::= sub::Type
       \ strategy::Expr term::Expr result::Expr Location ->
         ableC_Expr {
           ({proto_typedef strategy;
-            template<a> _Bool rewrite(const strategy s, const a term, a *const result);
+            template<typename a> _Bool rewrite(const strategy s, const a term, a *const result);
             $Expr{term}.tag == _list_d__Nil?
               $Expr{top.componentRewriteDefault} :
               $Expr{

@@ -30,7 +30,7 @@ datatype strategy {
   Rule(type_id id, struct generic_closure f);
 };
 
-template<a>
+template<typename a>
 _Bool rewrite(const strategy s, const a term, a *const result) {
   match (s) {
     &Fail() -> {

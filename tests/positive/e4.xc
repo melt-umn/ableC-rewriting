@@ -4,18 +4,18 @@
 #include <string.xh>
 #include <stdbool.h>
 
-template<a>
+template<typename a>
 struct item {
   a val;
   size_t count;
 };
 
-template<a>
+template<typename a>
 item<a> ?entry(a val) {
   return boundvar((item<a>){val, 1}, GC_malloc);
 }
 
-template<a>
+template<typename a>
 strategy compress(void) {
   return innermost(rule (list<item<a> ?> ?) {
       ?&[?&{v1, c1}, ?&{v2, c2} | t] @ when(v1 == v2) ->
@@ -23,7 +23,7 @@ strategy compress(void) {
     });
 }
 
-template<a>
+template<typename a>
 strategy decompress(void) {
   return innermost(rule (list<item<a> ?> ?) {
       ?&[?&{v, c} | t] @ when(c > 1) ->
