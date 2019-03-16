@@ -91,8 +91,8 @@ top::ExtType ::= sub::Type
             is_bound($Expr{e})?
               $Expr{
                 boundVarExpr(
-                  ableC_Expr { value($Expr{e}) },
                   ableC_Expr { GC_malloc },
+                  ableC_Expr { value($Expr{e}) },
                   location=builtin)} :
               $Expr{
                 freeVarExpr(
