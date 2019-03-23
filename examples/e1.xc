@@ -3,23 +3,23 @@
 #include <stdbool.h>
 #include <alloca.h>
 
-template<a>
+template<typename a, int (*cmp)(a, a)>
 datatype Set {
-  Node(a item, Set<a> *left, Set<a> *right);
+  Node(a item, Set<a, cmp> *left, Set<a, cmp> *right);
   Leaf();
 };
 
 template allocate datatype Set with GC_malloc;
 
-template<a>
-bool setContains(int (*cmp)(a, a), Set<a> *set, a item) {
+template<typename a, int (*cmp)(a, a)>
+bool setContains(Set<a, cmp> *set, a item) {
   match (set) {
     &Node(item1, left, right) -> {
       int diff = cmp(item, item1);
       if (diff < 0) {
-        return setContains(cmp, left, item);
+        return setContains(left, item);
       } else if (diff > 0) {
-        return setContains(cmp, right, item);
+        return setContains(right, item);
       } else {
         return true;
       }
@@ -28,23 +28,23 @@ bool setContains(int (*cmp)(a, a), Set<a> *set, a item) {
   }
 }
 
-template<a>
-Set<a> *setEmpty(void) {
-  return GC_malloc_Leaf<a>();
+template<typename a, int (*cmp)(a, a)>
+Set<a, cmp> *setEmpty(void) {
+  return GC_malloc_Leaf<a, cmp>();
 }
 
-template<a>
-Set<a> *setUnion(int (*cmp)(a, a), Set<a> *set1, Set<a> *set2) {
+template<typename a, int (*cmp)(a, a)>
+Set<a, cmp> *setUnion(Set<a, cmp> *set1, Set<a, cmp> *set2) {
   match (set1, set2) {
     &Node(item1, left1, right1), &Node(item2, left2, right2) -> {
       int diff = cmp(item1, item2);
       if (diff < 0) {
-        return GC_malloc_Node(item1, setUnion(cmp, left1, set2), right1);
+        return GC_malloc_Node(item1, setUnion(left1, set2), right1);
       } else if (diff > 0) {
-        return GC_malloc_Node(item1, left1, setUnion(cmp, right1, set2));
+        return GC_malloc_Node(item1, left1, setUnion(right1, set2));
       } else {
         // Both sets contain the same root item
-        return GC_malloc_Node(item1, setUnion(cmp, left1, left2), setUnion(cmp, right1, right2));
+        return GC_malloc_Node(item1, setUnion(left1, left2), setUnion(right1, right2));
       }
     }
     _, &Leaf() -> {
@@ -56,15 +56,15 @@ Set<a> *setUnion(int (*cmp)(a, a), Set<a> *set1, Set<a> *set2) {
   }
 }
 
-template<a>
-Set<a> *setInsert(int (*cmp)(a, a), Set<a> *set, a item) {
+template<typename a, int (*cmp)(a, a)>
+Set<a, cmp> *setInsert(Set<a, cmp> *set, a item) {
   match (set) {
     &Node(item1, left, right) -> {
       int diff = cmp(item1, item);
       if (diff < 0) {
-        return setInsert(cmp, left, item);
+        return setInsert(left, item);
       } else if (diff > 0) {
-        return setInsert(cmp, right, item);
+        return setInsert(right, item);
       } else {
         // item found in set
         return set;
@@ -77,18 +77,18 @@ Set<a> *setInsert(int (*cmp)(a, a), Set<a> *set, a item) {
   }
 }
 
-template<a>
-Set<a> *setRemove(int (*cmp)(a, a), Set<a> *set, a item) {
+template<typename a, int (*cmp)(a, a)>
+Set<a, cmp> *setRemove(Set<a, cmp> *set, a item) {
   match (set) {
     &Node(item1, left, right) -> {
       int diff = cmp(item1, item);
       if (diff < 0) {
-        return setRemove(cmp, left, item);
+        return setRemove(left, item);
       } else if (diff > 0) {
-        return setRemove(cmp, right, item);
+        return setRemove(right, item);
       } else {
         // item found in set
-        return setUnion(cmp, left, right);
+        return setUnion(left, right);
       }
     }
     &Leaf() -> {
@@ -108,19 +108,19 @@ datatype Term {
 
 allocate datatype Term with GC_malloc;
 
-Set<const char *> *getFreeVars(Term *term) {
+Set<const char *, strcmp> *getFreeVars(Term *term) {
   return match (term)
-    (&Var(n) -> setInsert(strcmp, setEmpty<const char *>(), n);
-     &Apply(a, b) -> setUnion(strcmp, getFreeVars(a), getFreeVars(b));
-     &Lambda(n, a) -> setRemove(strcmp, getFreeVars(a), n););
+    (&Var(n) -> setInsert(setEmpty<const char *, strcmp>(), n);
+     &Apply(a, b) -> setUnion(getFreeVars(a), getFreeVars(b));
+     &Lambda(n, a) -> setRemove(getFreeVars(a), n););
 }
 
 // term[n/a]
 strategy substitute(const char *n, Term *a) {
-  Set<const char *> *freeVars = getFreeVars(a);
+  Set<const char *, strcmp> *freeVars = getFreeVars(a);
   
   strategy alphaRename = rule (Term) {
-    Lambda(m, b) @ when(setContains(strcmp, freeVars, m)) -> ({
+    Lambda(m, b) @ when(setContains(freeVars, m)) -> ({
         static unsigned count = 0;
         char *freshVar = GC_malloc(10);
         sprintf(freshVar, "_%u", count++);

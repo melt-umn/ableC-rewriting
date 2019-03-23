@@ -4,31 +4,31 @@
 #include <string.xh>
 #include <stdbool.h>
 
-template<a>
+template<typename a>
 struct item {
   a val;
   size_t count;
 };
 
-template<a>
+template<typename a>
 item<a> ?entry(a val) {
-  return boundvar((item<a>){val, 1}, GC_malloc);
+  return boundvar(GC_malloc, (item<a>){val, 1});
 }
 
-template<a>
+template<typename a>
 strategy compress(void) {
   return innermost(rule (list<item<a> ?> ?) {
       ?&[?&{v1, c1}, ?&{v2, c2} | t] @ when(v1 == v2) ->
-        cons(GC_malloc, boundvar((item<a>){v1, c1 + c2}, GC_malloc), t);
+        cons(GC_malloc, boundvar(GC_malloc, (item<a>){v1, c1 + c2}), t);
     });
 }
 
-template<a>
+template<typename a>
 strategy decompress(void) {
   return innermost(rule (list<item<a> ?> ?) {
       ?&[?&{v, c} | t] @ when(c > 1) ->
-        newlist(GC_malloc)[boundvar((item<a>){v, 1}, GC_malloc),
-                           boundvar((item<a>){v, c - 1}, GC_malloc) | t];
+        newlist(GC_malloc)[boundvar(GC_malloc, (item<a>){v, 1}),
+                           boundvar(GC_malloc, (item<a>){v, c - 1}) | t];
     });
 }
 

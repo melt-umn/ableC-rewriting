@@ -366,7 +366,7 @@ top::StructDeclarator ::= name::Name  ty::TypeModifierExpr  attrs::Attributes
     else
       ableC_Expr {
         ({proto_typedef strategy;
-          template<a> _Bool rewrite(const strategy s, const a term, a *const result);
+          template<typename a> _Bool rewrite(const strategy s, const a term, a *const result);
           rewrite(
             $Expr{top.componentRewriteStrategy},
             $Expr{top.componentRewriteTerm}.$Name{name},
@@ -491,7 +491,7 @@ top::ParameterDecl ::= storage::StorageClasses  bty::BaseTypeExpr  mty::TypeModi
     else
       ableC_Expr {
         ({proto_typedef strategy;
-          template<a> _Bool rewrite(const strategy s, const a term, a *const result);
+          template<typename a> _Bool rewrite(const strategy s, const a term, a *const result);
           rewrite(
             $Expr{top.componentRewriteStrategy},
             $Expr{top.componentRewriteTerm}.contents.$name{top.constructorName}.$Name{fieldName},

@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdarg.h>
 
-template<a>
+template<typename a>
 datatype List {
   Cons(a head, List<a> *tail);
   Nil();
@@ -12,14 +12,14 @@ datatype List {
 
 template allocate datatype List with GC_malloc;
 
-template<a>
+template<typename a>
 List<a> *append(List<a> *l1, List<a> *l2) {
   return match (l1)
     (&Cons(h, t) -> GC_malloc_Cons(h, append(t, l2));
      &Nil() -> l2;);
 }
 
-template<a>
+template<typename a>
 List<a> *buildList(size_t n, ...) {
   va_list args;
   va_start(args, n);
