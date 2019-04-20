@@ -3,7 +3,6 @@ grammar edu:umn:cs:melt:exts:ableC:rewriting:abstractsyntax;
 abstract production choiceExpr
 top::Expr ::= e1::Expr e2::Expr
 {
-  propagate substituted;
   top.pp = pp"${e1.pp} <+ ${e2.pp}";
   
   local localErrors::[Message] =
@@ -24,7 +23,6 @@ top::Expr ::= e1::Expr e2::Expr
 abstract production seqExpr
 top::Expr ::= e1::Expr e2::Expr
 {
-  propagate substituted;
   top.pp = pp"${e1.pp} <* ${e2.pp}";
   
   local localErrors::[Message] =
@@ -45,7 +43,6 @@ top::Expr ::= e1::Expr e2::Expr
 abstract production actionExpr
 top::Expr ::= p::ParameterDecl s::Stmt
 {
-  propagate substituted;
   top.pp = pp"action (${p.pp}) ${nestlines(2, s.pp)}";
   
   local localErrors::[Message] =
@@ -98,7 +95,6 @@ top::Expr ::= p::ParameterDecl s::Stmt
 abstract production ruleExpr
 top::Expr ::= ty::TypeName es::ExprClauses
 {
-  propagate substituted;
   top.pp = pp"rule (${ty.pp}) ${nestlines(2, es.pp)}";
   
   local localErrors::[Message] =
@@ -191,7 +187,6 @@ Expr ::= f::Name a::Exprs loc::Location prod::(Expr ::= Expr Expr Expr Location)
 abstract production rewriteOneExpr
 top::Expr ::= strategy::Expr term::Expr result::Expr
 {
-  propagate substituted;
   top.pp = pp"_rewrite_one(${strategy.pp}, ${term.pp}, ${result.pp})";
   
   local t::Type = term.typerep;
@@ -210,7 +205,6 @@ top::Expr ::= strategy::Expr term::Expr result::Expr
 abstract production rewriteAllExpr
 top::Expr ::= strategy::Expr term::Expr result::Expr
 {
-  propagate substituted;
   top.pp = pp"_rewrite_all(${strategy.pp}, ${term.pp}, ${result.pp})";
   
   local t::Type = term.typerep;
@@ -229,7 +223,6 @@ top::Expr ::= strategy::Expr term::Expr result::Expr
 abstract production typeIdExpr
 top::Expr ::= ty::TypeName
 {
-  propagate substituted;
   top.pp = pp"_type_id(${ty.pp})";
   
   local typeIdDefs::Pair<Integer [Def]> = getTypeIdDefs(ty.typerep, addEnv(ty.defs, ty.env));
@@ -255,7 +248,6 @@ inherited attribute componentRewriteTransformIn::Expr;
 abstract production rewriteStruct
 top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strategy::Expr term::Expr result::Expr
 {
-  propagate substituted;
   top.pp = pp"rewriteADT(${strategy.pp}, ${term.pp}, ${result.pp})";
   
   local structLookup::[RefIdItem] =
@@ -390,7 +382,6 @@ top::StructDeclarator ::= msg::[Message]
 abstract production rewriteADT
 top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strategy::Expr term::Expr result::Expr
 {
-  propagate substituted;
   top.pp = pp"rewriteADT(${strategy.pp}, ${term.pp}, ${result.pp})";
   
   local adtName::Maybe<String> = term.typerep.adtName;
