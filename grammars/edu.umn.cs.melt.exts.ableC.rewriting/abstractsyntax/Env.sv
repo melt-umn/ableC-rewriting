@@ -28,6 +28,11 @@ top::Env ::= e::Decorated Env
 {
   top.typeIds = nonGlobalScope(e.typeIds);
 }
+aspect production functionEnv_i
+top::Env ::= e::Decorated Env
+{
+  top.typeIds = functionScope(e.typeIds);
+}
 
 synthesized attribute typeIdContribs::Contribs<Integer> occurs on Defs, Def;
 
