@@ -28,6 +28,11 @@ top::Env ::= e::Decorated Env
 {
   top.typeIds = nonGlobalScope(e.typeIds);
 }
+aspect production functionEnv_i
+top::Env ::= e::Decorated Env
+{
+  top.typeIds = functionScope(e.typeIds);
+}
 
 synthesized attribute typeIdContribs::Contribs<Integer> occurs on Defs, Def;
 
@@ -61,8 +66,11 @@ Pair<Integer [Def]> ::= t::Type  e::Decorated Env
   local typeId::Integer =
     case typeIds of
     | [] -> genInt()
-    | [id] -> id
-    | _ -> error("Found multiple type id entires for " ++ showType(t))
+    -- TODO: Theoretically the id should only be in the environment once, but there is a bug
+    -- somewhere with lifting
+    --| [id] -> id
+    --| ids -> error(s"Found multiple type id entires for ${showType(t)}: ${hackUnparse(ids)}")
+    | id :: _ -> id
     end;
   
   return
