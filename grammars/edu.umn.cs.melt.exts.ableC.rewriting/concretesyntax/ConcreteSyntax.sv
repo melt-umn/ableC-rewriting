@@ -11,8 +11,8 @@ imports edu:umn:cs:melt:exts:ableC:rewriting:abstractsyntax;
 exports edu:umn:cs:melt:exts:ableC:algebraicDataTypes:patternmatching:concretesyntax;
 
 -- Operators
-marking terminal ChoiceOp_t '<+' lexer classes {Csymbol};
-marking terminal SeqeOp_t   '<*' lexer classes {Csymbol};
+marking terminal ChoiceOp_t '<+' lexer classes {Operator};
+marking terminal SeqeOp_t   '<*' lexer classes {Operator};
 
 concrete productions top::AdditiveOp_c
 | '<+'
@@ -23,16 +23,9 @@ concrete productions top::AddMulLeftOp_c
   { top.ast = seqExpr(top.leftExpr, top.rightExpr, location=top.exprLocation); }
 
 -- Other special syntax
-marking terminal Action_t 'action'   lexer classes {Cidentifier}, font=font_all;
-marking terminal Rule_t   'rule'     lexer classes {Cidentifier}, font=font_all;
-marking terminal TypeId_t '_type_id' lexer classes {Cidentifier};
-
-aspect parser attribute context
-  action {
-    context = addIdentsToScope([name("action", location=builtin)], Action_t, context);
-    context = addIdentsToScope([name("rule", location=builtin)], Rule_t, context);
-    context = addIdentsToScope([name("_type_id", location=builtin)], TypeId_t, context);
-  };
+marking terminal Action_t 'action'   lexer classes {Keyword, Global};
+marking terminal Rule_t   'rule'     lexer classes {Keyword, Global};
+marking terminal TypeId_t '_type_id' lexer classes {Global};
 
 concrete productions top::PrimaryExpr_c
 | 'action' '(' p::ParameterDeclaration_c ')' '{' s::BlockItemList_c '}'
