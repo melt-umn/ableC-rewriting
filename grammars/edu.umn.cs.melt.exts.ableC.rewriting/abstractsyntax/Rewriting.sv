@@ -176,8 +176,8 @@ Expr ::= f::Name a::Exprs loc::Location prod::(Expr ::= Expr Expr Expr Location)
 {
   return
     case a of
-    | consExpr(strategy, consExpr(term, consExpr(result, nilExpr()))) ->
-      prod(strategy, term, result, loc)
+    | consExpr(strat, consExpr(term, consExpr(result, nilExpr()))) ->
+      prod(strat, term, result, loc)
     | _ -> errorExpr([err(loc, s"Wrong number of arguments to ${f.name}")], location=loc)
     end;
 }
@@ -185,9 +185,9 @@ Expr ::= f::Name a::Exprs loc::Location prod::(Expr ::= Expr Expr Expr Location)
 -- These are only used internally by the rewrite library, so no error checking.
 -- For simplicity, it is assumed that all children here contain no definitions.
 abstract production rewriteOneExpr
-top::Expr ::= strategy::Expr term::Expr result::Expr
+top::Expr ::= strat::Expr term::Expr result::Expr
 {
-  top.pp = pp"_rewrite_one(${strategy.pp}, ${term.pp}, ${result.pp})";
+  top.pp = pp"_rewrite_one(${strat.pp}, ${term.pp}, ${result.pp})";
   
   local t::Type = term.typerep;
   t.componentRewriteCombineProd = orExpr(_, _, location=_);
@@ -198,14 +198,14 @@ top::Expr ::= strategy::Expr term::Expr result::Expr
       ({if ($Expr{result}) {
           *$Expr{result} = $Expr{t.shallowCopyProd(term, top.location)};
         }
-        $Expr{t.componentRewriteProd(strategy, term, result, top.location)};})
+        $Expr{t.componentRewriteProd(strat, term, result, top.location)};})
     };
 }
 
 abstract production rewriteAllExpr
-top::Expr ::= strategy::Expr term::Expr result::Expr
+top::Expr ::= strat::Expr term::Expr result::Expr
 {
-  top.pp = pp"_rewrite_all(${strategy.pp}, ${term.pp}, ${result.pp})";
+  top.pp = pp"_rewrite_all(${strat.pp}, ${term.pp}, ${result.pp})";
   
   local t::Type = term.typerep;
   t.componentRewriteCombineProd = andExpr(_, _, location=_);
@@ -216,7 +216,7 @@ top::Expr ::= strategy::Expr term::Expr result::Expr
       ({if ($Expr{result}) {
           *$Expr{result} = $Expr{t.shallowCopyProd(term, top.location)};
         }
-        $Expr{t.componentRewriteProd(strategy, term, result, top.location)};})
+        $Expr{t.componentRewriteProd(strat, term, result, top.location)};})
     };
 }
 
@@ -246,9 +246,9 @@ synthesized attribute componentRewriteTransform::Expr;
 inherited attribute componentRewriteTransformIn::Expr;
 
 abstract production rewriteStruct
-top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strategy::Expr term::Expr result::Expr
+top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat::Expr term::Expr result::Expr
 {
-  top.pp = pp"rewriteADT(${strategy.pp}, ${term.pp}, ${result.pp})";
+  top.pp = pp"rewriteADT(${strat.pp}, ${term.pp}, ${result.pp})";
   
   local structLookup::[RefIdItem] =
     case term.typerep.maybeRefId of
@@ -267,7 +267,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strate
   newStruct.givenRefId = just(struct.refId);
   newStruct.componentRewriteCombineProd = combineProd;
   newStruct.componentRewriteDefault = defaultVal;
-  newStruct.componentRewriteStrategy = strategy;
+  newStruct.componentRewriteStrategy = strat;
   newStruct.componentRewriteTerm = term;
   newStruct.componentRewriteResult = result;
   
@@ -380,9 +380,9 @@ top::StructDeclarator ::= msg::[Message]
 }
 
 abstract production rewriteADT
-top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strategy::Expr term::Expr result::Expr
+top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat::Expr term::Expr result::Expr
 {
-  top.pp = pp"rewriteADT(${strategy.pp}, ${term.pp}, ${result.pp})";
+  top.pp = pp"rewriteADT(${strat.pp}, ${term.pp}, ${result.pp})";
   
   local adtName::Maybe<String> = term.typerep.adtName;
   
@@ -404,7 +404,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strate
   newADT.adtGivenName = adt.adtGivenName;
   newADT.componentRewriteCombineProd = combineProd;
   newADT.componentRewriteDefault = defaultVal;
-  newADT.componentRewriteStrategy = strategy;
+  newADT.componentRewriteStrategy = strat;
   newADT.componentRewriteTerm = term;
   newADT.componentRewriteResult = result;
   

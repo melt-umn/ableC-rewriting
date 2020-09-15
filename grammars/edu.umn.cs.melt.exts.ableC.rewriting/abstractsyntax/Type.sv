@@ -35,12 +35,12 @@ top::Type ::= quals::Qualifiers sub::Type
     if containsQualifier(constQualifier(location=builtin), sub)
     then \ Expr Expr Expr Location -> top.componentRewriteDefault
     else
-      \ strategy::Expr term::Expr result::Expr Location ->
+      \ strat::Expr term::Expr result::Expr Location ->
         ableC_Expr {
           ({proto_typedef strategy;
             template<typename a> _Bool rewrite(const strategy s, const a term, a *const result);
             $Expr{term}?
-              rewrite($Expr{strategy}, *$Expr{term}, $Expr{result}? *$Expr{result} : (void*)0) :
+              rewrite($Expr{strat}, *$Expr{term}, $Expr{result}? *$Expr{result} : (void*)0) :
               $Expr{top.componentRewriteDefault};})
         };
 }
@@ -104,7 +104,7 @@ top::ExtType ::= sub::Type
     if containsQualifier(constQualifier(location=builtin), sub)
     then \ Expr Expr Expr Location -> top.componentRewriteDefault
     else
-      \ strategy::Expr term::Expr result::Expr Location ->
+      \ strat::Expr term::Expr result::Expr Location ->
         ableC_Expr {
           ({proto_typedef strategy;
             template<typename a> _Bool rewrite(const strategy s, const a term, a *const result);
@@ -113,7 +113,7 @@ top::ExtType ::= sub::Type
             template<typename a> a value();
             is_bound($Expr{term})?
               rewrite(
-                $Expr{strategy},
+                $Expr{strat},
                 value($Expr{term}),
                 $Expr{result}?
                   &(((_var_d<$directTypeExpr{sub}> *)*$Expr{result})->contents._Bound.val) :
@@ -129,7 +129,7 @@ top::ExtType ::= sub::Type
     if containsQualifier(constQualifier(location=builtin), sub)
     then \ Expr Expr Expr Location -> top.componentRewriteDefault
     else
-      \ strategy::Expr term::Expr result::Expr Location ->
+      \ strat::Expr term::Expr result::Expr Location ->
         ableC_Expr {
           ({proto_typedef strategy;
             template<typename a> _Bool rewrite(const strategy s, const a term, a *const result);
@@ -139,7 +139,7 @@ top::ExtType ::= sub::Type
                 top.componentRewriteCombineProd(
                   ableC_Expr {
                     rewrite(
-                      $Expr{strategy},
+                      $Expr{strat},
                       $Expr{term}.contents._Cons.head,
                       $Expr{result}?
                         &($Expr{result}->contents._Cons.head) :
@@ -147,7 +147,7 @@ top::ExtType ::= sub::Type
                   },
                   ableC_Expr {
                     rewrite(
-                      $Expr{strategy},
+                      $Expr{strat},
                       $Expr{term}.contents._Cons.tail,
                       $Expr{result}?
                         &($Expr{result}->contents._Cons.tail) :
