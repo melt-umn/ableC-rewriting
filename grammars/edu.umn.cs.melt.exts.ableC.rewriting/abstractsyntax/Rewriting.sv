@@ -276,7 +276,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
     | errorType(), _ -> []
     -- Check that this struct has a definition
     | extType(_, refIdExtType(_, id, _)), [] ->
-      [err(top.location, s"struct ${id} does not have a definition.")]
+      [err(top.location, s"struct ${fromMaybe("<anon>", id)} does not have a definition.")]
     | _, _ -> []
     end ++
     checkRewritingHeaderDef(top.location, top.env);

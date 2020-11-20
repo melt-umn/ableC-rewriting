@@ -60,7 +60,7 @@ top::ExtType ::=
 }
 
 aspect production refIdExtType
-top::ExtType ::= kwd::StructOrEnumOrUnion  n::String  refId::String
+top::ExtType ::= kwd::StructOrEnumOrUnion  _  _
 {
   top.componentRewriteProd =
     case kwd of
