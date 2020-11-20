@@ -264,6 +264,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
   newStruct.isLast = struct.isLast;
   newStruct.env = struct.env;
   newStruct.returnType = struct.returnType;
+  newStruct.inAnonStructItem = false;
   newStruct.givenRefId = just(struct.refId);
   newStruct.componentRewriteCombineProd = combineProd;
   newStruct.componentRewriteDefault = defaultVal;
