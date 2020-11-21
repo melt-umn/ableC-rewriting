@@ -264,6 +264,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
   newStruct.isLast = struct.isLast;
   newStruct.env = struct.env;
   newStruct.returnType = struct.returnType;
+  newStruct.inAnonStructItem = false;
   newStruct.givenRefId = just(struct.refId);
   newStruct.componentRewriteCombineProd = combineProd;
   newStruct.componentRewriteDefault = defaultVal;
@@ -276,7 +277,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
     | errorType(), _ -> []
     -- Check that this struct has a definition
     | extType(_, refIdExtType(_, id, _)), [] ->
-      [err(top.location, s"struct ${id} does not have a definition.")]
+      [err(top.location, s"struct ${fromMaybe("<anon>", id)} does not have a definition.")]
     | _, _ -> []
     end ++
     checkRewritingHeaderDef(top.location, top.env);
