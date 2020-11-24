@@ -79,7 +79,7 @@ _Bool rewrite(const strategy s, const a term, a *const result) {
     }
     _ -> {
       fprintf(stderr, "Invalid strategy to rewrite: %p\n", s);
-      exit(1);
+      abort();
     }
   }
 }
