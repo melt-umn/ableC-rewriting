@@ -47,7 +47,7 @@ _Bool rewrite(const strategy s, const a term, a *const result) {
     }
     &Sequence(s1, s2) -> {
       a tmp;
-      return rewrite(s1, term, result? &tmp : NULL) && rewrite(s2, tmp, result);
+      return rewrite(s1, term, &tmp) && rewrite(s2, tmp, result);
     }
     &Neg(s) -> {
       return !rewrite(s, term, NULL);
@@ -79,7 +79,7 @@ _Bool rewrite(const strategy s, const a term, a *const result) {
     }
     _ -> {
       fprintf(stderr, "Invalid strategy to rewrite: %p\n", s);
-      exit(1);
+      abort();
     }
   }
 }
