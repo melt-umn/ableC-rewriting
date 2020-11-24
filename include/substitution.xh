@@ -1,0 +1,99 @@
+#include <unification.xh>
+#include <rewriting.xh>
+
+#ifndef _SUBSTITUTION_XH
+#define _SUBSTITUTION_XH
+
+// Representation of a set of variables of a particular type
+template<typename v>
+datatype _varset_d {
+  _VSNode(v ?var, _varset_d<v> *left, _varset_d<v> *right);
+  _VSEmpty();
+};
+template allocate datatype _varset_d with GC_malloc prefix _gc;
+
+using varset<typename v> = _varset_d<v> *;
+
+template<typename v>
+varset<v> emptyVars() {
+  return _gc_VSEmpty<v>();
+}
+
+template<typename v>
+varset<v> unionVars(varset<v> vars1, varset<v> vars2) {
+  return match (vars1, vars2)
+    (&_VSEmpty(), _ -> vars2;
+     _, &_VSEmpty() -> vars1;
+     &_VSNode(v1, l1, r1), &_VSNode(v2, l2, r2) ->
+       // TODO: This doesn't do balancing at all
+       (void *)v1 < (void *)v2?
+       _gc_VSNode(v1, l1, unionVars(vars2, r1)) :
+       (void *)v1 > (void *)v2?
+       _gc_VSNode(v1, unionVars(vars2, l1), r1) :
+       _gc_VSNode(v1, unionVars(l1, l2), unionVars(r1, r2)););
+}
+
+template<typename v>
+varset<v> insertVar(v ?var, varset<v> vars) {
+  return match (vars)
+    (&_VSEmpty() -> _gc_VSNode(var, emptyVars<v>(), emptyVars<v>());
+     &_VSNode(v1, l, r) ->
+       // TODO: This doesn't do balancing at all
+       (void *)v1 < (void *)var?
+       _gc_VSNode(v1, l, insertVar(var, r)) :
+       (void *)v1 > (void *)var?
+       _gc_VSNode(v1, insertVar(var, l), r) :
+       vars;);
+}
+
+// Extract a list of free variables of a particular type from a term
+template<typename a, typename v>
+varset<v> freeVars(a term) {
+  varset<v> result = emptyVars<v>();
+  strategy visitFreeVar = rule (v ?) { var@freevar -> var; };
+  strategy update = action (v ?var) {
+    *result = *insertVar(var, result);
+  };
+  if (!rewrite(allTopDown(visitFreeVar <* update), term, NULL)) {
+    fprintf(stderr, "freeVars traversal failed\n");
+    abort();
+  }
+  return result;
+}
+
+// Construct a strategy to substitute a new term for a free variable
+template<typename v>
+strategy varSub(v ?target, v ?sub) {
+  v ?target_base = base_var(target);
+  return rule (v ?) {
+    var@freevar @when ((void *)base_var(var) == (void *)target_base) -> sub;
+  };
+}
+
+// Construct a strategy that replaces a list of variables with fresh ones
+template<typename v>
+strategy freshenSub(varset<v> vars) {
+  return match (vars)
+    (&_VSEmpty() -> fail;
+     &_VSNode(v1, l, r) ->
+       freshenSub(l) <+ varSub(v1, freevar<v>(GC_malloc)) <+ freshenSub(r););
+}
+
+// Apply a freshening strategy to a term
+template<typename a>
+a freshenWith(strategy sub, a term) {
+  a result;
+  if (!rewrite(allTopDown(sub), term, &result)) {
+    fprintf(stderr, "freshen strategy failed\n");
+    abort();
+  }
+  return result;
+}
+
+// Freshen all free variables of a particular type in a term
+template<typename a, typename v>
+a freshen(a term) {
+  return freshenWith(freshenSub(freeVars<a, v>(term)), term);
+}
+
+#endif
