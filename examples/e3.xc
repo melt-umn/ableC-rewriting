@@ -5,7 +5,7 @@
 typedef datatype Type ?Type;
 
 datatype Type {
-  Fn(Type, Type );
+  Fn(Type, Type);
   List(Type);
   Int();
   Bool();

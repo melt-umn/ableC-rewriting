@@ -5,7 +5,7 @@
 typedef datatype Type ?Type;
 
 datatype Type {
-  Fn(Type, Type );
+  Fn(Type, Type);
   List(Type);
   Int();
   Bool();
@@ -73,6 +73,9 @@ int main() {
 
   if (!unify(innerSum, term<Type>(alloca) { Fn(List(List(List(Int()))), List(List(Int()))) })) {
     return 1;
+  }
+  if (unify(null, Fn(Bool(), freshVar()))) {
+    return 2; // Should fail
   }
   return 0;
 }
