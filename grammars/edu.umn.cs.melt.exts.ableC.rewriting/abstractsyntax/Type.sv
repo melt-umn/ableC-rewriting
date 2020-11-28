@@ -19,9 +19,8 @@ aspect production pointerType
 top::Type ::= quals::Qualifiers sub::Type
 {
   top.shallowCopyProd =
-    if containsQualifier(constQualifier(location=builtin), sub)
-    then \ e::Expr Location -> e
-    else
+    if traversable(sub)
+    then
       \ e::Expr Location ->
         ableC_Expr {
           ({$directTypeExpr{sub} *_result = (void*)0;
@@ -30,11 +29,11 @@ top::Type ::= quals::Qualifiers sub::Type
               *_result = *$Expr{e};
             }
             _result;})
-        };
+        }
+    else \ e::Expr Location -> e;
   top.componentRewriteProd =
-    if containsQualifier(constQualifier(location=builtin), sub)
-    then \ Expr Expr Expr Location -> top.componentRewriteDefault
-    else
+    if traversable(sub)
+    then
       \ strat::Expr term::Expr result::Expr Location ->
         ableC_Expr {
           ({proto_typedef strategy;
@@ -42,7 +41,8 @@ top::Type ::= quals::Qualifiers sub::Type
             $Expr{term}?
               rewrite($Expr{strat}, *$Expr{term}, $Expr{result}? *$Expr{result} : (void*)0) :
               $Expr{top.componentRewriteDefault};})
-        };
+        }
+    else \ Expr Expr Expr Location -> top.componentRewriteDefault;
 }
 
 aspect production extType
@@ -81,9 +81,8 @@ aspect production varType
 top::ExtType ::= sub::Type
 {
   top.shallowCopyProd =
-    if containsQualifier(constQualifier(location=builtin), sub)
-    then \ e::Expr Location -> e
-    else
+    if traversable(sub)
+    then
       \ e::Expr Location ->
         ableC_Expr {
           ({template<typename a> _Bool is_bound();
@@ -99,11 +98,11 @@ top::ExtType ::= sub::Type
                   typeName(directTypeExpr(sub), baseTypeExpr()),
                   ableC_Expr { GC_malloc },
                   location=builtin)};})
-        };
+        }
+    else \ e::Expr Location -> e;
   top.componentRewriteProd =
-    if containsQualifier(constQualifier(location=builtin), sub)
-    then \ Expr Expr Expr Location -> top.componentRewriteDefault
-    else
+    if traversable(sub)
+    then
       \ strat::Expr term::Expr result::Expr Location ->
         ableC_Expr {
           ({proto_typedef strategy;
@@ -119,16 +118,16 @@ top::ExtType ::= sub::Type
                   &(((_var_d<$directTypeExpr{sub}> *)*$Expr{result})->contents._Bound.val) :
                   (void*)0) :
               $Expr{top.componentRewriteDefault};})
-        };
+        }
+    else \ Expr Expr Expr Location -> top.componentRewriteDefault;
 }
 
 aspect production listType
 top::ExtType ::= sub::Type
 {
   top.componentRewriteProd =
-    if containsQualifier(constQualifier(location=builtin), sub)
-    then \ Expr Expr Expr Location -> top.componentRewriteDefault
-    else
+    if traversable(sub)
+    then
       \ strat::Expr term::Expr result::Expr Location ->
         ableC_Expr {
           ({proto_typedef strategy;
@@ -154,5 +153,16 @@ top::ExtType ::= sub::Type
                         (void *)0)
                   },
                   builtin)};})
-        };
+        }
+    else \ Expr Expr Expr Location -> top.componentRewriteDefault;
+}
+
+function traversable
+Boolean ::= t::Type
+{
+  return
+    case t of
+    | functionType(_, _, _) -> false
+    | _ -> containsQualifier(constQualifier(location=builtin), t)
+    end;
 }
