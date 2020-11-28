@@ -163,6 +163,6 @@ Boolean ::= t::Type
   return
     case t of
     | functionType(_, _, _) -> false
-    | _ -> containsQualifier(constQualifier(location=builtin), t)
+    | _ -> !containsQualifier(constQualifier(location=builtin), t)
     end;
 }
