@@ -11,8 +11,6 @@ datatype Type {
   Bool();
 };
 
-show Type with showType;
-
 string showType(Type t) {
   match (t) {
     freevar -> {
@@ -37,6 +35,8 @@ string showType(Type t) {
     }
   }
 }
+
+show Type with showType;
 
 Type freshType() {
   return freevar<datatype Type>(GC_malloc);
