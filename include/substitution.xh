@@ -50,7 +50,7 @@ varset<v> insertVar(v ?var, varset<v> vars) {
 template<typename a, typename v>
 varset<v> freeVars(a term) {
   varset<v> result = emptyVars<v>();
-  strategy visitFreeVar = rule (v ?) { var@freevar -> var; };
+  strategy visitFreeVar = rule (v ?) { var@freevar -> base_var(var); };
   strategy update = action (v ?var) {
     *result = *insertVar(var, result);
   };
