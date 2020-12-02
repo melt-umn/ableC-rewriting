@@ -30,8 +30,14 @@ datatype strategy {
   Rule(type_id id, struct generic_closure f);
 };
 
+static inline string showRec(closure<(strategy) -> strategy> f) {
+  return show((struct generic_closure)f);
+}
+show(closure<(strategy) -> strategy>) with showRec;
+
 template<typename a>
 _Bool rewrite(const strategy s, const a term, a *const result) {
+  printf("rewrite(%s, %s)\n", show(s).text, show(term).text);
   match (s) {
     &Fail() -> {
       return 0;
@@ -78,7 +84,7 @@ _Bool rewrite(const strategy s, const a term, a *const result) {
       }
     }
     _ -> {
-      fprintf(stderr, "Invalid strategy to rewrite: %p\n", s);
+      fprintf(stderr, "Invalid strategy to rewrite: %s\n", show(s).text);
       abort();
     }
   }
