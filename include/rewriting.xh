@@ -37,7 +37,6 @@ show(closure<(strategy) -> strategy>) with showRec;
 
 template<typename a>
 _Bool rewrite(const strategy s, const a term, a *const result) {
-  printf("rewrite(%s, %s)\n", show(s).text, show(term).text);
   match (s) {
     &Fail() -> {
       return 0;
