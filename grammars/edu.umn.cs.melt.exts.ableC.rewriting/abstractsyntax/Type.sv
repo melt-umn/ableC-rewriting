@@ -92,12 +92,7 @@ top::ExtType ::= sub::Type
                 boundVarExpr(
                   ableC_Expr { GC_malloc },
                   ableC_Expr { value($Expr{e}) },
-                  location=builtin)} :
-              $Expr{
-                freeVarExpr(
-                  typeName(directTypeExpr(sub), baseTypeExpr()),
-                  ableC_Expr { GC_malloc },
-                  location=builtin)};})
+                  location=builtin)} : $Expr{e};})
         }
     else \ e::Expr Location -> e;
   top.componentRewriteProd =
