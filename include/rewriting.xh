@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <gc.h>
+#include <string.xh>
 
 #ifndef _REWRITING_XH
 #define _REWRITING_XH
