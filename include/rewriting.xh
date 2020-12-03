@@ -31,10 +31,10 @@ datatype strategy {
   Rule(type_id id, struct generic_closure f);
 };
 
-static inline string showRec(closure<(strategy) -> strategy> f) {
-  return show((struct generic_closure)f);
+static inline string _showRec(closure<(strategy) -> strategy> f) {
+  return show(*(struct generic_closure *)&f);
 }
-show(closure<(strategy) -> strategy>) with showRec;
+show(closure<(strategy) -> strategy>) with _showRec;
 
 template<typename a>
 _Bool rewrite(const strategy s, const a term, a *const result) {
