@@ -121,6 +121,7 @@ top::Expr ::= ty::TypeName es::ExprClauses
       fnTypeExpr.defs ++
       case fnTypeExpr of
       | closureTypeExpr(_, ps, _) -> ps.functionDefs
+      | _ -> error("Unexpected fnTypeExpr")
       end,
       fnTypeExpr.env);
   es.matchLocation = top.location;
@@ -259,6 +260,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
   local struct::Decorated StructDecl =
     case structLookup of
     | structRefIdItem(s) :: _ -> s
+    | _ -> error("Demanded struct decl when lookup failed")
     end;
   local newStruct::StructDecl = new(struct);
   newStruct.isLast = struct.isLast;
@@ -396,6 +398,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
   local adt::Decorated ADTDecl =
     case adtLookup of
     | adtRefIdItem(adt) :: _ -> adt
+    | _ -> error("ADT decl demanded when lookup failed")
     end;
   local newADT::ADTDecl = new(adt);
   newADT.isTopLevel = adt.isTopLevel;
