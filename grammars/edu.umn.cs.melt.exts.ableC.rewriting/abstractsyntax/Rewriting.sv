@@ -57,15 +57,11 @@ top::Expr ::= p::ParameterDecl s::Stmt
   local fnTypeExpr::BaseTypeExpr =
     ableC_BaseTypeExpr { closure<($directTypeExpr{p.typerep}) -> void> };
   fnTypeExpr.env = addEnv(p.defs, p.env);
-  fnTypeExpr.returnType = nothing();
-  fnTypeExpr.breakValid = false;
-  fnTypeExpr.continueValid = false;
+  fnTypeExpr.controlStmtContext = initialControlStmtContext;
   fnTypeExpr.givenRefId = nothing();
   
   s.env = addEnv(globalDefsDef(typeIdDefs.snd) :: fnTypeExpr.defs ++ p.functionDefs ++ s.functionDefs, capturedEnv(top.env));
-  s.returnType = nothing();
-  s.breakValid = false;
-  s.continueValid = false;
+  s.controlStmtContext = initialControlStmtContext;
   
   local fwrd::Expr =
     injectGlobalDeclsExpr(
@@ -116,9 +112,7 @@ top::Expr ::= ty::TypeName es::ExprClauses
                $directTypeExpr{ty.typerep} *_result) -> _Bool>
     };
   fnTypeExpr.env = openScopeEnv(top.env);
-  fnTypeExpr.returnType = nothing();
-  fnTypeExpr.breakValid = false;
-  fnTypeExpr.continueValid = false;
+  fnTypeExpr.controlStmtContext = initialControlStmtContext;
   fnTypeExpr.givenRefId = nothing();
   
   es.env =
@@ -271,9 +265,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
   local newStruct::StructDecl = new(struct);
   newStruct.isLast = struct.isLast;
   newStruct.env = struct.env;
-  newStruct.returnType = struct.returnType;
-  newStruct.breakValid = struct.breakValid;
-  newStruct.continueValid = struct.continueValid;
+  newStruct.controlStmtContext = struct.controlStmtContext;
   newStruct.inAnonStructItem = false;
   newStruct.givenRefId = just(struct.refId);
   newStruct.componentRewriteCombineProd = combineProd;
@@ -411,9 +403,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
   local newADT::ADTDecl = new(adt);
   newADT.isTopLevel = adt.isTopLevel;
   newADT.env = adt.env;
-  newADT.returnType = adt.returnType;
-  newADT.breakValid = adt.breakValid;
-  newADT.continueValid = adt.continueValid;
+  newADT.controlStmtContext = adt.controlStmtContext;
   newADT.givenRefId = just(adt.refId);
   newADT.adtGivenName = adt.adtGivenName;
   newADT.componentRewriteCombineProd = combineProd;
