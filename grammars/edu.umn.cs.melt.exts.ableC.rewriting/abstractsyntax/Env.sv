@@ -65,7 +65,7 @@ Pair<Integer [Def]> ::= t::Type  e::Decorated Env
   local typeIds::[Integer] = lookupScope(t.mangledName, e.typeIds);
   local typeId::Integer =
     case typeIds of
-    | [] -> genInt()
+    | [] -> genIntT()
     -- TODO: Theoretically the id should only be in the environment once, but there is a bug
     -- somewhere with lifting
     --| [id] -> id
