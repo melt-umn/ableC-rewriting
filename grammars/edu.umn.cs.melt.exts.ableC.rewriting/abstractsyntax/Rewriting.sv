@@ -57,11 +57,11 @@ top::Expr ::= p::ParameterDecl s::Stmt
   local fnTypeExpr::BaseTypeExpr =
     ableC_BaseTypeExpr { closure<($directTypeExpr{p.typerep}) -> void> };
   fnTypeExpr.env = addEnv(p.defs, p.env);
-  fnTypeExpr.returnType = nothing();
+  fnTypeExpr.controlStmtContext = initialControlStmtContext;
   fnTypeExpr.givenRefId = nothing();
   
   s.env = addEnv(globalDefsDef(typeIdDefs.snd) :: fnTypeExpr.defs ++ p.functionDefs ++ s.functionDefs, capturedEnv(top.env));
-  s.returnType = nothing();
+  s.controlStmtContext = initialControlStmtContext;
   
   local fwrd::Expr =
     injectGlobalDeclsExpr(
@@ -112,7 +112,7 @@ top::Expr ::= ty::TypeName es::ExprClauses
                $directTypeExpr{ty.typerep} *_result) -> _Bool>
     };
   fnTypeExpr.env = openScopeEnv(top.env);
-  fnTypeExpr.returnType = nothing();
+  fnTypeExpr.controlStmtContext = initialControlStmtContext;
   fnTypeExpr.givenRefId = nothing();
   
   es.env =
@@ -121,6 +121,7 @@ top::Expr ::= ty::TypeName es::ExprClauses
       fnTypeExpr.defs ++
       case fnTypeExpr of
       | closureTypeExpr(_, ps, _) -> ps.functionDefs
+      | _ -> error("Unexpected fnTypeExpr")
       end,
       fnTypeExpr.env);
   es.matchLocation = top.location;
@@ -259,11 +260,13 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
   local struct::Decorated StructDecl =
     case structLookup of
     | structRefIdItem(s) :: _ -> s
+    | _ -> error("Demanded struct decl when lookup failed")
     end;
   local newStruct::StructDecl = new(struct);
   newStruct.isLast = struct.isLast;
   newStruct.env = struct.env;
-  newStruct.returnType = struct.returnType;
+  newStruct.controlStmtContext = struct.controlStmtContext;
+  newStruct.inAnonStructItem = false;
   newStruct.givenRefId = just(struct.refId);
   newStruct.componentRewriteCombineProd = combineProd;
   newStruct.componentRewriteDefault = defaultVal;
@@ -276,7 +279,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
     | errorType(), _ -> []
     -- Check that this struct has a definition
     | extType(_, refIdExtType(_, id, _)), [] ->
-      [err(top.location, s"struct ${id} does not have a definition.")]
+      [err(top.location, s"struct ${fromMaybe("<anon>", id)} does not have a definition.")]
     | _, _ -> []
     end ++
     checkRewritingHeaderDef(top.location, top.env);
@@ -395,11 +398,12 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
   local adt::Decorated ADTDecl =
     case adtLookup of
     | adtRefIdItem(adt) :: _ -> adt
+    | _ -> error("ADT decl demanded when lookup failed")
     end;
   local newADT::ADTDecl = new(adt);
   newADT.isTopLevel = adt.isTopLevel;
   newADT.env = adt.env;
-  newADT.returnType = adt.returnType;
+  newADT.controlStmtContext = adt.controlStmtContext;
   newADT.givenRefId = just(adt.refId);
   newADT.adtGivenName = adt.adtGivenName;
   newADT.componentRewriteCombineProd = combineProd;

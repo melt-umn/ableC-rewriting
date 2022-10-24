@@ -115,42 +115,34 @@ bool stmtListHasFreeVar(const char *n, List<Stmt> *s) {
      &Nil() -> false;);
 }
 
-Expr substituteExpr(Expr e, const char *n, Value v) {
-  strategy sub = rule (Expr) {
-    Var(n1) @ when(!strcmp(n, n1)) -> Const(v);
-  };
-
-  Expr result;
-  rewrite(bottomUp(try(sub)), e, &result);
-  return result;
-}
-
-List<Stmt> *substituteStmtList(List<Stmt> *s, const char *n, Value v);
-Stmt substituteStmt(Stmt s, const char *n, Value v) {
-  return match (s)
-    (Assign(n1, e) -> Assign(n1, substituteExpr(e, n, v));
-     Print(e) -> Print(substituteExpr(e, n, v));
-     If(c, t, e) -> If(substituteExpr(c, n, v),
-                       substituteStmtList(t, n, v),
-                       substituteStmtList(e, n, v));
-     w @ While(c, b) @ when(stmtListHasBinding(n, b)) -> If(substituteExpr(c, n, v),
-                                                            append(substituteStmtList(b, n, v),
-                                                                   GC_malloc_Cons(w, GC_malloc_Nil<Stmt>())),
-                                                            GC_malloc_Nil<Stmt>());
-     While(c, b) -> While(substituteExpr(c, n, v), substituteStmtList(b, n, v)););
-}
-
-List<Stmt> *substituteStmtList(List<Stmt> *s, const char *n, Value v) {
-  return match (s)
-    (&Cons(h, t) -> GC_malloc_Cons(substituteStmt(h, n, v),
-                                   stmtHasBinding(n, h)? t : substituteStmtList(t, n, v));
-     &Nil() -> s;);
+strategy substitute(const char *n, Value v) {
+  return allTopDown(rule (Expr) {
+      Var(n1) @ when(!strcmp(n, n1)) -> Const(v);
+    } <+ rule (Stmt) {
+      w @ While(c, b) @ when(stmtListHasBinding(n, b)) -> ({
+          Expr newC; List<Stmt> *newB;
+          rewrite(substitute(n, v), c, &newC);
+          rewrite(substitute(n, v), b, &newB);
+          If(newC, append(newB, GC_malloc_Cons(w, GC_malloc_Nil<Stmt>())),
+             GC_malloc_Nil<Stmt>());
+        });
+    } <+ rule (List<Stmt>) {
+      Cons(h, t) @ when(stmtHasBinding(n, h)) -> ({
+          Stmt newH;
+          rewrite(substitute(n, v), h, &newH);
+          Cons(newH, t);
+        });
+    });
 }
 
 string evaluate(List<Stmt> *prog) {
   strategy eval = outermost(rule (List<Stmt> *) {
         &Cons(Assign(n, e), s) @when(!stmtListHasFreeVar(n, s)) -> s;
-        &Cons(a@Assign(n, Const(v)), s) -> substituteStmtList(s, n, v);
+        &Cons(a@Assign(n, Const(v)), s) -> ({
+            List<Stmt> *newS;
+            rewrite(substitute(n, v), s, &newS);
+            newS;
+          });
         &Cons(Print(Const(String(a1))), &Cons(Print(Const(String(a2))), s)) -> ({
             char *a3 = GC_malloc(strlen(a1) + strlen(a2) + 2);
             sprintf(a3, "%s\n%s", a1, a2);
