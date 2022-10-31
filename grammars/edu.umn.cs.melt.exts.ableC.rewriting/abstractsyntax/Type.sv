@@ -2,8 +2,9 @@ grammar edu:umn:cs:melt:exts:ableC:rewriting:abstractsyntax;
 
 import edu:umn:cs:melt:ableC:abstractsyntax:overloadable;
 
-autocopy attribute componentRewriteCombineProd::(Expr ::= Expr Expr Location) occurs on Type, ExtType;
-autocopy attribute componentRewriteDefault::Expr occurs on Type, ExtType;
+inherited attribute componentRewriteCombineProd::(Expr ::= Expr Expr Location) occurs on Type, ExtType;
+inherited attribute componentRewriteDefault::Expr occurs on Type, ExtType;
+propagate componentRewriteCombineProd, componentRewriteDefault on Type, ExtType;
 
 synthesized attribute shallowCopyProd::(Expr ::= Expr Location) occurs on Type, ExtType;
 synthesized attribute componentRewriteProd::(Expr ::= Expr Expr Expr Location) occurs on Type, ExtType;
