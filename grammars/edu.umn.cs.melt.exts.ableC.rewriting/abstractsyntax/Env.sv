@@ -56,7 +56,7 @@ top::Def ::=
 abstract production typeIdDef
 top::Def ::= s::String  t::Integer
 {
-  top.typeIdContribs = [pair(s, t)];
+  top.typeIdContribs = [(s, t)];
 }
 
 function getTypeIdDefs
