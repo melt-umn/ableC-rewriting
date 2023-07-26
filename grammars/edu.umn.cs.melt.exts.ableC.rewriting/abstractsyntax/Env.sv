@@ -74,9 +74,8 @@ Pair<Integer [Def]> ::= t::Type  e::Decorated Env
     end;
   
   return
-    pair(
-      typeId,
-      if null(typeIds)
-      then [typeIdDef(t.mangledName, typeId)]
-      else []);
+    (typeId,
+     if null(typeIds)
+     then [typeIdDef(t.mangledName, typeId)]
+     else []);
 }
