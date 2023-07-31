@@ -2,12 +2,12 @@ grammar edu:umn:cs:melt:exts:ableC:rewriting:abstractsyntax;
 
 import edu:umn:cs:melt:ableC:abstractsyntax:overloadable;
 
-inherited attribute componentRewriteCombineProd::(Expr ::= Expr Expr Location) occurs on Type, ExtType;
+inherited attribute componentRewriteCombineProd::(Expr ::= Expr Expr) occurs on Type, ExtType;
 inherited attribute componentRewriteDefault::Expr occurs on Type, ExtType;
 propagate componentRewriteCombineProd, componentRewriteDefault on Type, ExtType;
 
-synthesized attribute shallowCopyProd::(Expr ::= Expr Location) occurs on Type, ExtType;
-synthesized attribute componentRewriteProd::(Expr ::= Expr Expr Expr Location) occurs on Type, ExtType;
+synthesized attribute shallowCopyProd::(Expr ::= Expr) occurs on Type, ExtType;
+synthesized attribute componentRewriteProd::(Expr ::= Expr Expr Expr) occurs on Type, ExtType;
 
 aspect default production
 top::Type ::=
@@ -66,7 +66,7 @@ top::ExtType ::= kwd::StructOrEnumOrUnion  _  _
   top.componentRewriteProd =
     case kwd of
     | structSEU() ->
-      rewriteStruct(top.componentRewriteCombineProd, top.componentRewriteDefault, _, _, _, location=_)
+      rewriteStruct(top.componentRewriteCombineProd, top.componentRewriteDefault, _, _, _)
     | _ -> \ Expr Expr Expr Location -> top.componentRewriteDefault
     end;
 }
@@ -75,7 +75,7 @@ aspect production adtExtType
 top::ExtType ::= adtName::String adtDeclName::String refId::String
 {
   top.componentRewriteProd =
-    rewriteADT(top.componentRewriteCombineProd, top.componentRewriteDefault, _, _, _, location=_);
+    rewriteADT(top.componentRewriteCombineProd, top.componentRewriteDefault, _, _, _);
 }
 
 aspect production varType
@@ -92,8 +92,7 @@ top::ExtType ::= sub::Type
               $Expr{
                 boundVarExpr(
                   ableC_Expr { GC_malloc },
-                  ableC_Expr { value($Expr{e}) },
-                  location=builtin)} : $Expr{e};})
+                  ableC_Expr { value($Expr{e}) })} : $Expr{e};})
         }
     else \ e::Expr Location -> e;
   top.componentRewriteProd =
@@ -159,6 +158,6 @@ Boolean ::= t::Type
   return
     case t of
     | functionType(_, _, _) -> false
-    | _ -> !containsQualifier(constQualifier(location=builtin), t)
+    | _ -> !containsQualifier(constQualifier(), t)
     end;
 }

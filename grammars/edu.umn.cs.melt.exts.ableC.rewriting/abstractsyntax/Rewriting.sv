@@ -74,8 +74,7 @@ top::Expr ::= p::ParameterDecl s::Stmt
               };
             // Need to cast as a pointer due to C's restrictions on directly casting structs
             *(struct generic_closure*)&_fn;}))
-      },
-      location=builtin);
+      });
   
   forwards to mkErrorCheck(localErrors, fwrd);
 }
@@ -88,7 +87,7 @@ top::Expr ::= ty::TypeName es::ExprClauses
   local localErrors::[Message] =
     ty.errors ++ es.errors ++
     (if !typeAssignableTo(ty.typerep, es.typerep)
-     then [err(top.location, s"Rule has type ${showType(ty.typerep)} but rhs has type ${showType(es.typerep)}")]
+     then [errFromOrigin(top, s"Rule has type ${showType(ty.typerep)} but rhs has type ${showType(es.typerep)}")]
      else []) ++
     checkRewritingHeaderDef(top.location, top.env);
   
@@ -124,8 +123,7 @@ top::Expr ::= ty::TypeName es::ExprClauses
               };
             // Need to cast as a pointer due to C's restrictions on directly casting structs
             *(struct generic_closure*)&_fn;}))
-      },
-      location=builtin);
+      });
   
   forwards to mkErrorCheck(localErrors, fwrd);
 }
@@ -138,22 +136,22 @@ aspect function getInitialEnvDefs
        "_rewrite_one",
        builtinFunctionValueItem(
          builtinType(nilQualifier(), voidType()),
-         rewriteCombinatorHandler(_, _, _, rewriteOneExpr(_, _, _, location=_)))),
+         rewriteCombinatorHandler(_, _, _, rewriteOneExpr))),
      valueDef(
        "_rewrite_all",
        builtinFunctionValueItem(
          builtinType(nilQualifier(), voidType()),
-         rewriteCombinatorHandler(_, _, _, rewriteAllExpr(_, _, _, location=_))))];
+         rewriteCombinatorHandler(_, _, _, rewriteAllExpr)))];
 }
 
 function rewriteCombinatorHandler
-Expr ::= f::Name a::Exprs loc::Location prod::(Expr ::= Expr Expr Expr Location)
+Expr ::= f::Name a::Exprs prod::(Expr ::= Expr Expr Expr Location)
 {
   return
     case a of
     | consExpr(strat, consExpr(term, consExpr(result, nilExpr()))) ->
       prod(strat, term, result, loc)
-    | _ -> errorExpr([err(loc, s"Wrong number of arguments to ${f.name}")], location=loc)
+    | _ -> errorExpr([err(loc, s"Wrong number of arguments to ${f.name}")])
     end;
 }
 
@@ -166,7 +164,7 @@ top::Expr ::= strat::Expr term::Expr result::Expr
   propagate env, controlStmtContext;
   
   local t::Type = term.typerep;
-  t.componentRewriteCombineProd = orExpr(_, _, location=_);
+  t.componentRewriteCombineProd = orExpr;
   t.componentRewriteDefault = ableC_Expr { (_Bool)0 };
   
   forwards to
@@ -185,7 +183,7 @@ top::Expr ::= strat::Expr term::Expr result::Expr
   propagate env, controlStmtContext;
   
   local t::Type = term.typerep;
-  t.componentRewriteCombineProd = andExpr(_, _, location=_);
+  t.componentRewriteCombineProd = andExpr;
   t.componentRewriteDefault = ableC_Expr { (_Bool)1 };
   
   forwards to
@@ -257,7 +255,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
     | errorType(), _ -> []
     -- Check that this struct has a definition
     | extType(_, refIdExtType(_, id, _)), [] ->
-      [err(top.location, s"struct ${fromMaybe("<anon>", id)} does not have a definition.")]
+      [errFromOrigin(top, s"struct ${fromMaybe("<anon>", id)} does not have a definition.")]
     | _, _ -> []
     end ++
     checkRewritingHeaderDef(top.location, top.env);
@@ -333,7 +331,7 @@ aspect production structField
 top::StructDeclarator ::= name::Name  ty::TypeModifierExpr  attrs::Attributes
 {
   top.componentRewriteTransform =
-    if containsQualifier(constQualifier(location=builtin), ty.typerep)
+    if containsQualifier(constQualifier(), ty.typerep)
     then top.componentRewriteDefault
     else
       ableC_Expr {
@@ -394,9 +392,9 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
     case term.typerep, adtName, adtLookup of
     | errorType(), _, _ -> []
     -- Check that parameter type is an ADT of some sort
-    | t, nothing(), _ -> [err(top.location, s"rewrite expected a datatype (got ${showType(t)}).")]
+    | t, nothing(), _ -> [errFromOrigin(top, s"rewrite expected a datatype (got ${showType(t)}).")]
     -- Check that this ADT has a definition
-    | _, just(id), [] -> [err(top.location, s"datatype ${id} does not have a definition.")]
+    | _, just(id), [] -> [errFromOrigin(top, s"datatype ${id} does not have a definition.")]
     | _, just(id), _ -> []
     end ++
     checkRewritingHeaderDef(top.location, top.env);
@@ -458,7 +456,7 @@ aspect production parameterDecl
 top::ParameterDecl ::= storage::StorageClasses  bty::BaseTypeExpr  mty::TypeModifierExpr  n::MaybeName  attrs::Attributes
 {
   top.componentRewriteTransform =
-    if containsQualifier(constQualifier(location=builtin), mty.typerep)
+    if containsQualifier(constQualifier(), mty.typerep)
     then top.componentRewriteDefault
     else
       ableC_Expr {
