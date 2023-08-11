@@ -7,9 +7,13 @@ top::Expr ::= e1::Expr e2::Expr
   
   local localErrors::[Message] =
     e1.errors ++ e2.errors ++
-    checkRewritingHeaderDef(top.location, top.env) ++
-    checkStrategyType(e1.typerep, "<+", e1.location) ++
-    checkStrategyType(e2.typerep, "<+", e2.location);
+    checkRewritingHeaderDef(top.env) ++
+    attachNote logicalLocationFromOrigin(e1) on
+      checkStrategyType(e1.typerep, "<+")
+    end ++
+    attachNote logicalLocationFromOrigin(e2) on
+      checkStrategyType(e2.typerep, "<+")
+    end;
 
   forward fwrd =
     ableC_Expr {
@@ -25,9 +29,13 @@ top::Expr ::= e1::Expr e2::Expr
   
   local localErrors::[Message] =
     e1.errors ++ e2.errors ++
-    checkRewritingHeaderDef(top.location, top.env) ++
-    checkStrategyType(e1.typerep, "<*", e1.location) ++
-    checkStrategyType(e2.typerep, "<*", e2.location);
+    checkRewritingHeaderDef(top.env) ++
+    attachNote logicalLocationFromOrigin(e1) on
+      checkStrategyType(e1.typerep, "<*")
+    end ++
+    attachNote logicalLocationFromOrigin(e2) on
+      checkStrategyType(e2.typerep, "<*")
+    end;
   
   forward fwrd =
     ableC_Expr {
@@ -43,7 +51,7 @@ top::Expr ::= p::ParameterDecl s::Stmt
   
   local localErrors::[Message] =
     p.errors ++ s.errors ++
-    checkRewritingHeaderDef(top.location, top.env);
+    checkRewritingHeaderDef(top.env);
   
   local typeIdDefs::Pair<Integer [Def]> = getTypeIdDefs(p.typerep, addEnv(p.defs, p.env));
   
@@ -89,14 +97,13 @@ top::Expr ::= ty::TypeName es::ExprClauses
     (if !typeAssignableTo(ty.typerep, es.typerep)
      then [errFromOrigin(top, s"Rule has type ${showType(ty.typerep)} but rhs has type ${showType(es.typerep)}")]
      else []) ++
-    checkRewritingHeaderDef(top.location, top.env);
+    checkRewritingHeaderDef(top.env);
   
   local typeIdDefs::Pair<Integer [Def]> = getTypeIdDefs(ty.typerep, addEnv(ty.defs, ty.env));
   
   ty.env = top.env;
   ty.controlStmtContext = top.controlStmtContext;
   es.initialEnv = es.transform.env;
-  es.matchLocation = top.location;
   es.expectedTypes = [ty.typerep];
   es.transformIn = [ableC_Expr { _term }];
   es.endLabelName = "_end"; -- Only one in the function, so no unique id
@@ -136,22 +143,22 @@ aspect function getInitialEnvDefs
        "_rewrite_one",
        builtinFunctionValueItem(
          builtinType(nilQualifier(), voidType()),
-         rewriteCombinatorHandler(_, _, _, rewriteOneExpr))),
+         rewriteCombinatorHandler(_, _, rewriteOneExpr))),
      valueDef(
        "_rewrite_all",
        builtinFunctionValueItem(
          builtinType(nilQualifier(), voidType()),
-         rewriteCombinatorHandler(_, _, _, rewriteAllExpr)))];
+         rewriteCombinatorHandler(_, _, rewriteAllExpr)))];
 }
 
 function rewriteCombinatorHandler
-Expr ::= f::Name a::Exprs prod::(Expr ::= Expr Expr Expr Location)
+Expr ::= f::Name a::Exprs prod::(Expr ::= Expr Expr Expr)
 {
   return
     case a of
     | consExpr(strat, consExpr(term, consExpr(result, nilExpr()))) ->
-      prod(strat, term, result, loc)
-    | _ -> errorExpr([err(loc, s"Wrong number of arguments to ${f.name}")])
+      prod(strat, term, result)
+    | _ -> errorExpr([errFromOrigin(a, s"Wrong number of arguments to ${f.name}")])
     end;
 }
 
@@ -170,9 +177,9 @@ top::Expr ::= strat::Expr term::Expr result::Expr
   forwards to
     ableC_Expr {
       ({if ($Expr{result}) {
-          *$Expr{result} = $Expr{t.shallowCopyProd(term, top.location)};
+          *$Expr{result} = $Expr{t.shallowCopyProd(term)};
         }
-        $Expr{t.componentRewriteProd(strat, term, result, top.location)};})
+        $Expr{t.componentRewriteProd(strat, term, result)};})
     };
 }
 
@@ -189,9 +196,9 @@ top::Expr ::= strat::Expr term::Expr result::Expr
   forwards to
     ableC_Expr {
       ({if ($Expr{result}) {
-          *$Expr{result} = $Expr{t.shallowCopyProd(term, top.location)};
+          *$Expr{result} = $Expr{t.shallowCopyProd(term)};
         }
-        $Expr{t.componentRewriteProd(strat, term, result, top.location)};})
+        $Expr{t.componentRewriteProd(strat, term, result)};})
     };
 }
 
@@ -222,7 +229,7 @@ synthesized attribute componentRewriteTransform::Expr;
 inherited attribute componentRewriteTransformIn::Expr;
 
 abstract production rewriteStruct
-top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat::Expr term::Expr result::Expr
+top::Expr ::= combineProd::(Expr ::= Expr Expr) defaultVal::Expr strat::Expr term::Expr result::Expr
 {
   top.pp = pp"rewriteADT(${strat.pp}, ${term.pp}, ${result.pp})";
   propagate env, controlStmtContext;
@@ -259,7 +266,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
       [errFromOrigin(top, s"struct ${fromMaybe("<anon>", id)} does not have a definition.")]
     | _, _ -> []
     end ++
-    checkRewritingHeaderDef(top.location, top.env);
+    checkRewritingHeaderDef(top.env);
   local fwrd::Expr = newStruct.componentRewriteTransform;
   forwards to mkErrorCheck(localErrors, fwrd);
 }
@@ -280,8 +287,7 @@ aspect production consStructItem
 top::StructItemList ::= h::StructItem  t::StructItemList
 {
   top.componentRewriteTransform = 
-    top.componentRewriteCombineProd(
-      h.componentRewriteTransform, t.componentRewriteTransform, builtin);
+    top.componentRewriteCombineProd(h.componentRewriteTransform, t.componentRewriteTransform);
 }
 aspect production nilStructItem
 top::StructItemList ::=
@@ -319,8 +325,7 @@ aspect production consStructDeclarator
 top::StructDeclarators ::= h::StructDeclarator  t::StructDeclarators
 {
   top.componentRewriteTransform = 
-    top.componentRewriteCombineProd(
-      h.componentRewriteTransform, t.componentRewriteTransform, h.sourceLocation);
+    top.componentRewriteCombineProd(h.componentRewriteTransform, t.componentRewriteTransform);
 }
 aspect production nilStructDeclarator
 top::StructDeclarators ::=
@@ -359,7 +364,7 @@ top::StructDeclarator ::= msg::[Message]
 }
 
 abstract production rewriteADT
-top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat::Expr term::Expr result::Expr
+top::Expr ::= combineProd::(Expr ::= Expr Expr) defaultVal::Expr strat::Expr term::Expr result::Expr
 {
   top.pp = pp"rewriteADT(${strat.pp}, ${term.pp}, ${result.pp})";
   propagate env, controlStmtContext;
@@ -398,7 +403,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
     | _, just(id), [] -> [errFromOrigin(top, s"datatype ${id} does not have a definition.")]
     | _, just(id), _ -> []
     end ++
-    checkRewritingHeaderDef(top.location, top.env);
+    checkRewritingHeaderDef(top.env);
   local fwrd::Expr = newADT.componentRewriteTransform;
   forwards to mkErrorCheck(localErrors, fwrd);
 }
@@ -443,8 +448,7 @@ aspect production consParameters
 top::Parameters ::= h::ParameterDecl t::Parameters
 {
   top.componentRewriteTransform =
-    top.componentRewriteCombineProd(
-      h.componentRewriteTransform, t.componentRewriteTransform, h.sourceLocation);
+    top.componentRewriteCombineProd(h.componentRewriteTransform, t.componentRewriteTransform);
 }
 
 aspect production nilParameters
@@ -474,17 +478,17 @@ top::ParameterDecl ::= storage::StorageClasses  bty::BaseTypeExpr  mty::TypeModi
 
 -- Check the given env for the given function name
 function checkRewritingHeaderDef
-[Message] ::= loc::Location env::Decorated Env
+[Message] ::= env::Decorated Env
 {
   return
     if !null(lookupTemplate("rewrite", env))
     then []
-    else [err(loc, "Missing include of rewriting.xh")];
+    else [errFromOrigin(ambientOrigin(), "Missing include of rewriting.xh")];
 }
 
 -- Check that operand has rewriting type
 function checkStrategyType
-[Message] ::= t::Type op::String loc::Location
+[Message] ::= t::Type op::String
 {
   local maybeRefId::Maybe<String> =
     case t.defaultFunctionArrayLvalueConversion of
@@ -495,6 +499,6 @@ function checkStrategyType
     case t, maybeRefId of
     | errorType(), _ -> []
     | _, just("edu:umn:cs:melt:exts:ableC:rewriting:strategy") -> []
-    | _, _ -> [err(loc, s"Operand to ${op} expected strategy type (got ${showType(t)})")]
+    | _, _ -> [errFromOrigin(ambientOrigin(), s"Operand to ${op} expected strategy type (got ${showType(t)})")]
     end;
 }
