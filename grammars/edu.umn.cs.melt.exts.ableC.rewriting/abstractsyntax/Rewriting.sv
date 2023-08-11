@@ -120,7 +120,7 @@ top::Expr ::= ty::TypeName es::ExprClauses
               lambda ($directTypeExpr{ty.typerep} _term,
                       $directTypeExpr{ty.typerep} *_result) -> _Bool {
                 $directTypeExpr{ty.typerep} _match_result;
-                $Stmt{@es.transform};
+                $Stmt{@es.transform}
                 return 0;
                 _end:
                 if (_result) {
