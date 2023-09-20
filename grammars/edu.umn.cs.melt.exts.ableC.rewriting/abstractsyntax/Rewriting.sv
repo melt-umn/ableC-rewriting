@@ -243,6 +243,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
   local newStruct::StructDecl = new(struct);
   newStruct.isLast = struct.isLast;
   newStruct.env = struct.env;
+  newStruct.localEnv = struct.localEnv;
   newStruct.controlStmtContext = struct.controlStmtContext;
   newStruct.inAnonStructItem = false;
   newStruct.givenRefId = just(struct.refId);
