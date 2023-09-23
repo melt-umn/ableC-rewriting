@@ -3,6 +3,7 @@ grammar edu:umn:cs:melt:exts:ableC:rewriting:abstractsyntax;
 abstract production choiceExpr
 top::Expr ::= e1::Expr e2::Expr
 {
+  propagate controlStmtContext;
   top.pp = pp"${e1.pp} <+ ${e2.pp}";
   
   local localErrors::[Message] =
@@ -11,6 +12,7 @@ top::Expr ::= e1::Expr e2::Expr
     checkStrategyType(e1.typerep, "<+", e1.location) ++
     checkStrategyType(e2.typerep, "<+", e2.location);
   
+  e1.env = top.env;
   e2.env = addEnv(e1.defs, e1.env);
   
   local fwrd::Expr =
@@ -23,6 +25,7 @@ top::Expr ::= e1::Expr e2::Expr
 abstract production seqExpr
 top::Expr ::= e1::Expr e2::Expr
 {
+  propagate controlStmtContext;
   top.pp = pp"${e1.pp} <* ${e2.pp}";
   
   local localErrors::[Message] =
@@ -31,6 +34,7 @@ top::Expr ::= e1::Expr e2::Expr
     checkStrategyType(e1.typerep, "<*", e1.location) ++
     checkStrategyType(e2.typerep, "<*", e2.location);
   
+  e1.env = top.env;
   e2.env = addEnv(e1.defs, e1.env);
   
   local fwrd::Expr =
@@ -52,6 +56,7 @@ top::Expr ::= p::ParameterDecl s::Stmt
   local typeIdDefs::Pair<Integer [Def]> = getTypeIdDefs(p.typerep, addEnv(p.defs, p.env));
   
   p.env = openScopeEnv(top.env);
+  p.controlStmtContext = initialControlStmtContext;
   p.position = 0;
   
   local fnTypeExpr::BaseTypeExpr =
@@ -95,6 +100,7 @@ top::Expr ::= p::ParameterDecl s::Stmt
 abstract production ruleExpr
 top::Expr ::= ty::TypeName es::ExprClauses
 {
+  propagate controlStmtContext;
   top.pp = pp"rule (${ty.pp}) ${nestlines(2, es.pp)}";
   
   local localErrors::[Message] =
@@ -115,6 +121,7 @@ top::Expr ::= ty::TypeName es::ExprClauses
   fnTypeExpr.controlStmtContext = initialControlStmtContext;
   fnTypeExpr.givenRefId = nothing();
   
+  ty.env = top.env;
   es.env =
     addEnv(
       globalDefsDef(typeIdDefs.snd) ::
@@ -189,6 +196,7 @@ abstract production rewriteOneExpr
 top::Expr ::= strat::Expr term::Expr result::Expr
 {
   top.pp = pp"_rewrite_one(${strat.pp}, ${term.pp}, ${result.pp})";
+  propagate env, controlStmtContext;
   
   local t::Type = term.typerep;
   t.componentRewriteCombineProd = orExpr(_, _, location=_);
@@ -207,6 +215,7 @@ abstract production rewriteAllExpr
 top::Expr ::= strat::Expr term::Expr result::Expr
 {
   top.pp = pp"_rewrite_all(${strat.pp}, ${term.pp}, ${result.pp})";
+  propagate env, controlStmtContext;
   
   local t::Type = term.typerep;
   t.componentRewriteCombineProd = andExpr(_, _, location=_);
@@ -225,6 +234,7 @@ abstract production typeIdExpr
 top::Expr ::= ty::TypeName
 {
   top.pp = pp"_type_id(${ty.pp})";
+  propagate env, controlStmtContext;
   
   local typeIdDefs::Pair<Integer [Def]> = getTypeIdDefs(ty.typerep, addEnv(ty.defs, ty.env));
   
@@ -240,9 +250,9 @@ top::Expr ::= ty::TypeName
 }
 
 -- Component rewrite overload productions
-autocopy attribute componentRewriteStrategy::Expr;
-autocopy attribute componentRewriteTerm::Expr;
-autocopy attribute componentRewriteResult::Expr;
+inherited attribute componentRewriteStrategy::Expr;
+inherited attribute componentRewriteTerm::Expr;
+inherited attribute componentRewriteResult::Expr;
 synthesized attribute componentRewriteTransform::Expr;
 inherited attribute componentRewriteTransformIn::Expr;
 
@@ -250,6 +260,7 @@ abstract production rewriteStruct
 top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat::Expr term::Expr result::Expr
 {
   top.pp = pp"rewriteADT(${strat.pp}, ${term.pp}, ${result.pp})";
+  propagate env, controlStmtContext;
   
   local structLookup::[RefIdItem] =
     case term.typerep.maybeRefId of
@@ -265,6 +276,7 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
   local newStruct::StructDecl = new(struct);
   newStruct.isLast = struct.isLast;
   newStruct.env = struct.env;
+  newStruct.localEnv = struct.localEnv;
   newStruct.controlStmtContext = struct.controlStmtContext;
   newStruct.inAnonStructItem = false;
   newStruct.givenRefId = just(struct.refId);
@@ -287,12 +299,11 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
   forwards to mkErrorCheck(localErrors, fwrd);
 }
 
-attribute componentRewriteCombineProd occurs on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
-attribute componentRewriteDefault occurs on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
-attribute componentRewriteStrategy occurs on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
-attribute componentRewriteTerm occurs on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
-attribute componentRewriteResult occurs on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
-attribute componentRewriteTransform occurs on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
+attribute componentRewriteCombineProd, componentRewriteDefault, componentRewriteStrategy, componentRewriteTerm, componentRewriteResult, componentRewriteTransform
+  occurs on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
+
+propagate componentRewriteCombineProd, componentRewriteDefault, componentRewriteStrategy, componentRewriteTerm, componentRewriteResult
+  on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
 
 aspect production structDecl
 top::StructDecl ::= attrs::Attributes  name::MaybeName  dcls::StructItemList
@@ -386,6 +397,7 @@ abstract production rewriteADT
 top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat::Expr term::Expr result::Expr
 {
   top.pp = pp"rewriteADT(${strat.pp}, ${term.pp}, ${result.pp})";
+  propagate env, controlStmtContext;
   
   local adtName::Maybe<String> = term.typerep.adtName;
   
@@ -426,13 +438,12 @@ top::Expr ::= combineProd::(Expr ::= Expr Expr Location) defaultVal::Expr strat:
   forwards to mkErrorCheck(localErrors, fwrd);
 }
 
-attribute componentRewriteCombineProd occurs on ADTDecl, ConstructorList, Constructor, Parameters, ParameterDecl;
-attribute componentRewriteDefault occurs on ADTDecl, ConstructorList, Constructor, Parameters, ParameterDecl;
-attribute componentRewriteStrategy occurs on ADTDecl, ConstructorList, Constructor, Parameters, ParameterDecl;
-attribute componentRewriteTerm occurs on ADTDecl, ConstructorList, Constructor, Parameters, ParameterDecl;
-attribute componentRewriteResult occurs on ADTDecl, ConstructorList, Constructor, Parameters, ParameterDecl;
-attribute componentRewriteTransform occurs on ADTDecl, ConstructorList, Constructor, Parameters, ParameterDecl;
+attribute componentRewriteCombineProd, componentRewriteDefault, componentRewriteStrategy, componentRewriteTerm, componentRewriteResult, componentRewriteTransform
+  occurs on ADTDecl, ConstructorList, Constructor, Parameters, ParameterDecl;
 attribute componentRewriteTransformIn occurs on Constructor;
+
+propagate componentRewriteCombineProd, componentRewriteDefault, componentRewriteStrategy, componentRewriteTerm, componentRewriteResult
+  on ADTDecl, ConstructorList, Constructor, Parameters, ParameterDecl;
 
 aspect production adtDecl
 top::ADTDecl ::= attrs::Attributes n::Name cs::ConstructorList
