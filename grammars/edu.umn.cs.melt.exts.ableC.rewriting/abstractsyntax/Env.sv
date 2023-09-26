@@ -56,7 +56,7 @@ top::Def ::=
 abstract production typeIdDef
 top::Def ::= s::String  t::Integer
 {
-  top.typeIdContribs = [pair(s, t)];
+  top.typeIdContribs = [(s, t)];
 }
 
 function getTypeIdDefs
@@ -74,9 +74,8 @@ Pair<Integer [Def]> ::= t::Type  e::Decorated Env
     end;
   
   return
-    pair(
-      typeId,
-      if null(typeIds)
-      then [typeIdDef(t.mangledName, typeId)]
-      else []);
+    (typeId,
+     if null(typeIds)
+     then [typeIdDef(t.mangledName, typeId)]
+     else []);
 }
