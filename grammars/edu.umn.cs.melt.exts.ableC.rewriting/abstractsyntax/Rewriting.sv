@@ -3,7 +3,6 @@ grammar edu:umn:cs:melt:exts:ableC:rewriting:abstractsyntax;
 abstract production choiceExpr
 top::Expr ::= e1::Expr e2::Expr
 {
-  propagate controlStmtContext;
   top.pp = pp"${e1.pp} <+ ${e2.pp}";
   
   local localErrors::[Message] =
@@ -11,13 +10,10 @@ top::Expr ::= e1::Expr e2::Expr
     checkRewritingHeaderDef(top.location, top.env) ++
     checkStrategyType(e1.typerep, "<+", e1.location) ++
     checkStrategyType(e2.typerep, "<+", e2.location);
-  
-  e1.env = top.env;
-  e2.env = addEnv(e1.defs, e1.env);
-  
-  local fwrd::Expr =
+
+  forward fwrd =
     ableC_Expr {
-      GC_malloc_Choice($Expr{decExpr(e1, location=builtin)}, $Expr{decExpr(e2, location=builtin)})
+      GC_malloc_Choice($Expr{@e1}, $Expr{@e2})
     };
   forwards to mkErrorCheck(localErrors, fwrd);
 }
@@ -25,7 +21,6 @@ top::Expr ::= e1::Expr e2::Expr
 abstract production seqExpr
 top::Expr ::= e1::Expr e2::Expr
 {
-  propagate controlStmtContext;
   top.pp = pp"${e1.pp} <* ${e2.pp}";
   
   local localErrors::[Message] =
@@ -34,12 +29,9 @@ top::Expr ::= e1::Expr e2::Expr
     checkStrategyType(e1.typerep, "<*", e1.location) ++
     checkStrategyType(e2.typerep, "<*", e2.location);
   
-  e1.env = top.env;
-  e2.env = addEnv(e1.defs, e1.env);
-  
-  local fwrd::Expr =
+  forward fwrd =
     ableC_Expr {
-      GC_malloc_Sequence($Expr{decExpr(e1, location=builtin)}, $Expr{decExpr(e2, location=builtin)})
+      GC_malloc_Sequence($Expr{@e1}, $Expr{@e2})
     };
   forwards to mkErrorCheck(localErrors, fwrd);
 }
@@ -58,24 +50,15 @@ top::Expr ::= p::ParameterDecl s::Stmt
   p.env = openScopeEnv(top.env);
   p.controlStmtContext = initialControlStmtContext;
   p.position = 0;
-  
-  local fnTypeExpr::BaseTypeExpr =
-    ableC_BaseTypeExpr { closure<($directTypeExpr{p.typerep}) -> void> };
-  fnTypeExpr.env = addEnv(p.defs, p.env);
-  fnTypeExpr.controlStmtContext = initialControlStmtContext;
-  fnTypeExpr.givenRefId = nothing();
-  
-  s.env = addEnv(globalDefsDef(typeIdDefs.snd) :: fnTypeExpr.defs ++ p.functionDefs ++ s.functionDefs, capturedEnv(top.env));
-  s.controlStmtContext = initialControlStmtContext;
-  
-  local fwrd::Expr =
+
+  forward fwrd =
     injectGlobalDeclsExpr(
       foldDecl([defsDecl(typeIdDefs.snd)]),
       ableC_Expr {
         proto_typedef type_id;
         GC_malloc_Action(
           $intLiteralExpr{typeIdDefs.fst},
-          ({$BaseTypeExpr{decTypeExpr(fnTypeExpr)} _fn =
+          ({closure<($directTypeExpr{p.typerep}) -> void> _fn =
               lambda (
                 $Parameters{foldParameterDecl([
                   parameterDecl(
@@ -87,7 +70,7 @@ top::Expr ::= p::ParameterDecl s::Stmt
                     | nothing() -> nothingName()
                     end,
                     nilAttribute())])}) -> void {
-                $Stmt{decStmt(s)};
+                $Stmt{@s};
               };
             // Need to cast as a pointer due to C's restrictions on directly casting structs
             *(struct generic_closure*)&_fn;}))
@@ -100,7 +83,6 @@ top::Expr ::= p::ParameterDecl s::Stmt
 abstract production ruleExpr
 top::Expr ::= ty::TypeName es::ExprClauses
 {
-  propagate controlStmtContext;
   top.pp = pp"rule (${ty.pp}) ${nestlines(2, es.pp)}";
   
   local localErrors::[Message] =
@@ -112,42 +94,27 @@ top::Expr ::= ty::TypeName es::ExprClauses
   
   local typeIdDefs::Pair<Integer [Def]> = getTypeIdDefs(ty.typerep, addEnv(ty.defs, ty.env));
   
-  local fnTypeExpr::BaseTypeExpr =
-    ableC_BaseTypeExpr {
-      closure<($BaseTypeExpr{typeModifierTypeExpr(ty.bty, ty.mty)} _term,
-               $directTypeExpr{ty.typerep} *_result) -> _Bool>
-    };
-  fnTypeExpr.env = openScopeEnv(top.env);
-  fnTypeExpr.controlStmtContext = initialControlStmtContext;
-  fnTypeExpr.givenRefId = nothing();
-  
   ty.env = top.env;
-  es.env =
-    addEnv(
-      globalDefsDef(typeIdDefs.snd) ::
-      fnTypeExpr.defs ++
-      case fnTypeExpr of
-      | closureTypeExpr(_, ps, _) -> ps.functionDefs
-      | _ -> error("Unexpected fnTypeExpr")
-      end,
-      fnTypeExpr.env);
+  ty.controlStmtContext = top.controlStmtContext;
+  es.initialEnv = es.transform.env;
   es.matchLocation = top.location;
   es.expectedTypes = [ty.typerep];
   es.transformIn = [ableC_Expr { _term }];
   es.endLabelName = "_end"; -- Only one in the function, so no unique id
   
-  local fwrd::Expr =
+  forward fwrd =
     injectGlobalDeclsExpr(
       foldDecl([defsDecl(typeIdDefs.snd)]),
       ableC_Expr {
         proto_typedef type_id;
         GC_malloc_Rule(
           $intLiteralExpr{typeIdDefs.fst},
-          ({$BaseTypeExpr{decTypeExpr(fnTypeExpr)} _fn =
+          ({closure<($BaseTypeExpr{typeModifierTypeExpr(ty.bty, ty.mty)} _term,
+                     $directTypeExpr{ty.typerep} *_result) -> _Bool> _fn =
               lambda ($directTypeExpr{ty.typerep} _term,
                       $directTypeExpr{ty.typerep} *_result) -> _Bool {
                 $directTypeExpr{ty.typerep} _match_result;
-                $Stmt{es.transform};
+                $Stmt{@es.transform};
                 return 0;
                 _end:
                 if (_result) {
