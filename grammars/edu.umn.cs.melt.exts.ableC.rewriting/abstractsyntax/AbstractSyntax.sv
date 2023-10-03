@@ -17,5 +17,3 @@ imports edu:umn:cs:melt:exts:ableC:templating:abstractsyntax;
 imports edu:umn:cs:melt:exts:ableC:vector:abstractsyntax;
 imports edu:umn:cs:melt:exts:ableC:closure:abstractsyntax;
 imports edu:umn:cs:melt:exts:ableC:prolog:list:abstractsyntax;
-
-global builtin::Location = builtinLoc("rewriting");
