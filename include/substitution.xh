@@ -1,5 +1,6 @@
 #include <unification.xh>
 #include <rewriting.xh>
+#include <arena.h>
 
 #ifndef _SUBSTITUTION_XH
 #define _SUBSTITUTION_XH
@@ -10,51 +11,54 @@ datatype _varset_d {
   _VSNode(v ?var, _varset_d<v> *left, _varset_d<v> *right);
   _VSEmpty();
 };
-template allocate datatype _varset_d with GC_malloc prefix _gc;
 
 using varset<typename v> = _varset_d<v> *;
 
 template<typename v>
-varset<v> emptyVars() {
-  return _gc_VSEmpty<v>();
+varset<v> emptyVars(arena_t ar) {
+  allocate_using arena ar;
+  return new _VSEmpty<v>();
 }
 
 template<typename v>
-varset<v> unionVars(varset<v> vars1, varset<v> vars2) {
+varset<v> unionVars(varset<v> vars1, varset<v> vars2, arena_t ar) {
+  allocate_using arena ar;
   return match (vars1, vars2)
     (&_VSEmpty(), _ -> vars2;
      _, &_VSEmpty() -> vars1;
      &_VSNode(v1, l1, r1), &_VSNode(v2, l2, r2) ->
        // TODO: This doesn't do balancing at all
        (void *)v1 < (void *)v2?
-       _gc_VSNode(v1, l1, unionVars(vars2, r1)) :
+       new _VSNode(v1, l1, unionVars(vars2, r1, ar)) :
        (void *)v1 > (void *)v2?
-       _gc_VSNode(v1, unionVars(vars2, l1), r1) :
-       _gc_VSNode(v1, unionVars(l1, l2), unionVars(r1, r2)););
+       new _VSNode(v1, unionVars(vars2, l1, ar), r1, ar) :
+       new _VSNode(v1, unionVars(l1, l2, ar), unionVars(r1, r2, ar)););
 }
 
 template<typename v>
-varset<v> insertVar(v ?var, varset<v> vars) {
+varset<v> insertVar(v ?var, varset<v> vars, arena_t ar) {
+  allocate_using arena ar;
   return match (vars)
-    (&_VSEmpty() -> _gc_VSNode(var, emptyVars<v>(), emptyVars<v>());
+    (&_VSEmpty() -> new _VSNode(var, emptyVars<v>(ar), emptyVars<v>(ar));
      &_VSNode(v1, l, r) ->
        // TODO: This doesn't do balancing at all
        (void *)v1 < (void *)var?
-       _gc_VSNode(v1, l, insertVar(var, r)) :
+       new _VSNode(v1, l, insertVar(var, r, ar)) :
        (void *)v1 > (void *)var?
-       _gc_VSNode(v1, insertVar(var, l), r) :
+       new _VSNode(v1, insertVar(var, l, ar), r) :
        vars;);
 }
 
 // Extract a list of free variables of a particular type from a term
 template<typename a, typename v>
-varset<v> freeVars(a term) {
-  varset<v> result = emptyVars<v>();
+varset<v> freeVars(a term, arena_t ar) {
+  allocate_using arena ar;
+  varset<v> result = emptyVars<v>(ar);
   strategy visitFreeVar = rule (v ?) { var@freevar -> base_var(var); };
   strategy update = action (v ?var) {
-    *result = *insertVar(var, result);
+    *result = *insertVar(var, result, ar);
   };
-  if (!rewrite(allTopDown(visitFreeVar <* update), term, NULL)) {
+  if (!rewrite(allTopDown(visitFreeVar <* update, ar), term, NULL)) {
     fprintf(stderr, "freeVars traversal failed\n");
     abort();
   }
@@ -63,7 +67,8 @@ varset<v> freeVars(a term) {
 
 // Construct a strategy to substitute a new term for a free variable
 template<typename v>
-strategy varSub(v ?target, v ?sub) {
+strategy varSub(v ?target, v ?sub, arena_t ar) {
+  allocate_using arena ar;
   v ?target_base = base_var(target);
   return rule (v ?) {
     var@freevar @when ((void *)base_var(var) == (void *)target_base) -> sub;
@@ -72,18 +77,20 @@ strategy varSub(v ?target, v ?sub) {
 
 // Construct a strategy that replaces a list of variables with fresh ones
 template<typename v>
-strategy freshenSub(varset<v> vars) {
+strategy freshenSub(varset<v> vars, arena_t ar) {
+  allocate_using arena ar;
   return match (vars)
     (&_VSEmpty() -> fail;
      &_VSNode(v1, l, r) ->
-       freshenSub(l) <+ varSub(v1, freevar<v>(GC_malloc)) <+ freshenSub(r););
+       freshenSub(l, ar) <+ varSub(v1, new var<v>(), ar) <+ freshenSub(r, ar););
 }
 
 // Apply a freshening strategy to a term
 template<typename a>
-a freshenWith(strategy sub, a term) {
+a freshenWith(strategy sub, a term, arena_t ar) {
+  allocate_using arena ar;
   a result;
-  if (!rewrite(allTopDown(sub), term, &result)) {
+  if (!rewrite(allTopDown(sub, ar), term, &result)) {
     fprintf(stderr, "freshen strategy failed\n");
     abort();
   }
@@ -92,8 +99,9 @@ a freshenWith(strategy sub, a term) {
 
 // Freshen all free variables of a particular type in a term
 template<typename a, typename v>
-a freshen(a term) {
-  return freshenWith(freshenSub(freeVars<a, v>(term)), term);
+a freshen(a term, arena_t ar) {
+  allocate_using arena ar;
+  return freshenWith(freshenSub(freeVars<a, v>(term, ar), ar), term, ar);
 }
 
 #endif

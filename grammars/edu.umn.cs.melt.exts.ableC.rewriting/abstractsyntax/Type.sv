@@ -1,162 +1,155 @@
 grammar edu:umn:cs:melt:exts:ableC:rewriting:abstractsyntax;
 
-import edu:umn:cs:melt:ableC:abstractsyntax:overloadable;
-
-inherited attribute componentRewriteCombineProd::(Expr ::= Expr Expr) occurs on Type, ExtType;
-inherited attribute componentRewriteDefault::Expr occurs on Type, ExtType;
-propagate componentRewriteCombineProd, componentRewriteDefault on Type, ExtType;
-
 synthesized attribute shallowCopyProd::(Expr ::= Expr) occurs on Type, ExtType;
-synthesized attribute componentRewriteProd::(Expr ::= Expr Expr Expr) occurs on Type, ExtType;
+
+type TraversalImpl = (Expr ::= (Expr ::= Expr Expr) Expr Expr Expr Expr);
+synthesized attribute traversalProd::TraversalImpl occurs on Type, ExtType;
+
+fun idTraversal
+Expr ::= comb::(Expr ::= Expr Expr) defaultVal::Expr strat::Expr term::Expr result::Expr =
+  defaultVal;
+
+fun combineTraversal
+TraversalImpl ::= t1::TraversalImpl t2::TraversalImpl =
+  \ comb::(Expr ::= Expr Expr) defaultVal::Expr strat::Expr term::Expr result::Expr ->
+    comb(t1(comb, defaultVal, strat, term, result), t2(comb, defaultVal, strat, term, result));
 
 aspect default production
 top::Type ::=
 {
-  top.shallowCopyProd = \ e::Expr -> e;
-  top.componentRewriteProd = \ Expr Expr Expr -> top.componentRewriteDefault;
+  top.shallowCopyProd = id;
+  top.traversalProd = idTraversal;
 }
 
 aspect production pointerType
 top::Type ::= quals::Qualifiers sub::Type
 {
   top.shallowCopyProd =
-    if traversable(sub)
+    if traversable(^sub)
     then
       \ e::Expr ->
         ableC_Expr {
-          ({$directTypeExpr{sub} *_result = (void*)0;
+          ({$directTypeExpr{^sub} *_result = (void*)0;
             if ($Expr{e}) {
-              _result = GC_malloc(sizeof($directTypeExpr{sub}));
+              _result = allocate(sizeof($directTypeExpr{^sub}));
               *_result = *$Expr{e};
             }
             _result;})
         }
     else \ e::Expr -> e;
-  top.componentRewriteProd =
-    if traversable(sub)
+  top.traversalProd =
+    if traversable(^sub)
     then
-      \ strat::Expr term::Expr result::Expr ->
+      \ comb::(Expr ::= Expr Expr) nil::Expr strat::Expr term::Expr result::Expr ->
         ableC_Expr {
           ({proto_typedef strategy;
             template<typename a> _Bool rewrite(const strategy s, const a term, a *const result);
             $Expr{term}?
               rewrite($Expr{strat}, *$Expr{term}, $Expr{result}? *$Expr{result} : (void*)0) :
-              $Expr{top.componentRewriteDefault};})
+              $Expr{nil};})
         }
-    else \ Expr Expr Expr -> top.componentRewriteDefault;
+    else idTraversal;
 }
 
 aspect production extType
 top::Type ::= quals::Qualifiers sub::ExtType
 {
   top.shallowCopyProd = sub.shallowCopyProd;
-  top.componentRewriteProd = sub.componentRewriteProd;
+  top.traversalProd = sub.traversalProd;
 }
 
 aspect default production
 top::ExtType ::=
 {
-  top.shallowCopyProd = \ e::Expr -> e;
-  top.componentRewriteProd = \ Expr Expr Expr -> top.componentRewriteDefault;
+  top.shallowCopyProd = id;
+  top.traversalProd = idTraversal;
 }
 
 aspect production refIdExtType
-top::ExtType ::= kwd::StructOrEnumOrUnion  _  _
+top::ExtType ::= kwd::StructOrEnumOrUnion  tagName::Maybe<String>  refId::String
 {
-  top.componentRewriteProd =
+  top.traversalProd =
     case kwd of
-    | structSEU() ->
-      rewriteStruct(top.componentRewriteCombineProd, top.componentRewriteDefault, _, _, _)
-    | _ -> \ Expr Expr Expr -> top.componentRewriteDefault
+    | structSEU() -> traverseStruct(tagName, refId, _, _, _, _, _)
+    | _ -> idTraversal
     end;
 }
 
 aspect production adtExtType
 top::ExtType ::= adtName::String adtDeclName::String refId::String
 {
-  top.componentRewriteProd =
-    rewriteADT(top.componentRewriteCombineProd, top.componentRewriteDefault, _, _, _);
+  top.traversalProd = traverseADT(adtName, refId, _, _, _, _, _);
 }
 
 aspect production varType
 top::ExtType ::= sub::Type
 {
   top.shallowCopyProd =
-    if traversable(sub)
+    if traversable(^sub)
     then
       \ e::Expr ->
         ableC_Expr {
           ({template<typename a> _Bool is_bound();
             template<typename a> _Bool value();
-            is_bound($Expr{e})?
-              $Expr{
-                boundVarExpr(
-                  ableC_Expr { GC_malloc },
-                  ableC_Expr { value($Expr{e}) })} : $Expr{e};})
+            is_bound($Expr{e})? new var<$directTypeExpr{^sub}>(value($Expr{e})) : $Expr{e};})
         }
     else \ e::Expr -> e;
-  top.componentRewriteProd =
-    if traversable(sub)
-    then
-      \ strat::Expr term::Expr result::Expr ->
-        ableC_Expr {
-          ({proto_typedef strategy;
-            template<typename a> _Bool rewrite(const strategy s, const a term, a *const result);
-            template<typename a> struct _var_d;
-            template<typename a> _Bool is_bound();
-            template<typename a> a value();
-            is_bound($Expr{term})?
-              rewrite(
-                $Expr{strat},
-                value($Expr{term}),
-                $Expr{result}?
-                  &(((_var_d<$directTypeExpr{sub}> *)*$Expr{result})->contents._Bound.val) :
-                  (void*)0) :
-              $Expr{top.componentRewriteDefault};})
-        }
-    else \ Expr Expr Expr -> top.componentRewriteDefault;
+  top.traversalProd =
+    if traversable(^sub)
+    then \ comb::(Expr ::= Expr Expr) nil::Expr strat::Expr term::Expr result::Expr ->
+      ableC_Expr {
+        ({proto_typedef strategy;
+          template<typename a> _Bool rewrite(const strategy s, const a term, a *const result);
+          template<typename a> struct _var_d;
+          template<typename a> _Bool is_bound();
+          template<typename a> a value();
+          is_bound($Expr{term})?
+            rewrite(
+              $Expr{strat},
+              value($Expr{term}),
+              $Expr{result}?
+                &(((_var_d<$directTypeExpr{^sub}> *)*$Expr{result})->contents._Bound.val) :
+                (void*)0) :
+            $Expr{nil};})
+      }
+    else idTraversal;
 }
 
 aspect production listType
 top::ExtType ::= sub::Type
 {
-  top.componentRewriteProd =
-    if traversable(sub)
-    then
-      \ strat::Expr term::Expr result::Expr ->
-        ableC_Expr {
-          ({proto_typedef strategy;
-            template<typename a> _Bool rewrite(const strategy s, const a term, a *const result);
-            $Expr{term}.tag == _list_d__Nil?
-              $Expr{top.componentRewriteDefault} :
-              $Expr{
-                top.componentRewriteCombineProd(
-                  ableC_Expr {
-                    rewrite(
-                      $Expr{strat},
-                      $Expr{term}.contents._Cons.head,
-                      $Expr{result}?
-                        &($Expr{result}->contents._Cons.head) :
-                        (void *)0)
-                  },
-                  ableC_Expr {
-                    rewrite(
-                      $Expr{strat},
-                      $Expr{term}.contents._Cons.tail,
-                      $Expr{result}?
-                        &($Expr{result}->contents._Cons.tail) :
-                        (void *)0)
-                  })};})
-        }
-    else \ Expr Expr Expr -> top.componentRewriteDefault;
+  top.traversalProd =
+    if traversable(^sub)
+    then \ comb::(Expr ::= Expr Expr) nil::Expr strat::Expr term::Expr result::Expr ->
+      ableC_Expr {
+        ({proto_typedef strategy;
+          template<typename a> _Bool rewrite(const strategy s, const a term, a *const result);
+          $Expr{term}.tag == _list_d__Nil?
+            $Expr{nil} :
+            $Expr{
+              comb(
+                ableC_Expr {
+                  rewrite(
+                    $Expr{strat},
+                    $Expr{term}.contents._Cons.head,
+                    $Expr{result}?
+                      &($Expr{result}->contents._Cons.head) :
+                      (void *)0)
+                },
+                ableC_Expr {
+                  rewrite(
+                    $Expr{strat},
+                    $Expr{term}.contents._Cons.tail,
+                    $Expr{result}?
+                      &($Expr{result}->contents._Cons.tail) :
+                      (void *)0)
+                })};})
+      }
+    else idTraversal;
 }
 
-function traversable
-Boolean ::= t::Type
-{
-  return
-    case t of
-    | functionType(_, _, _) -> false
-    | _ -> !containsQualifier(constQualifier(), t)
-    end;
-}
+fun traversable Boolean ::= t::Type =
+  case t of
+  | functionType(_, _, _) -> false
+  | _ -> !containsQualifier(constQualifier(), t)
+  end;

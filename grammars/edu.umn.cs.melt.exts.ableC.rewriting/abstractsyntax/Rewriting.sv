@@ -8,6 +8,7 @@ top::Expr ::= e1::Expr e2::Expr
   local localErrors::[Message] =
     e1.errors ++ e2.errors ++
     checkRewritingHeaderDef(top.env) ++
+    allocErrors(top.env) ++
     attachNote logicalLocationFromOrigin(e1) on
       checkStrategyType(e1.typerep, "<+")
     end ++
@@ -17,9 +18,9 @@ top::Expr ::= e1::Expr e2::Expr
 
   forward fwrd =
     ableC_Expr {
-      GC_malloc_Choice($Expr{@e1}, $Expr{@e2})
+      new Choice($Expr{@e1}, $Expr{@e2})
     };
-  forwards to mkErrorCheck(localErrors, fwrd);
+  forwards to if null(localErrors) then @fwrd else errorExpr(localErrors);
 }
 
 abstract production seqExpr
@@ -29,6 +30,7 @@ top::Expr ::= e1::Expr e2::Expr
   
   local localErrors::[Message] =
     e1.errors ++ e2.errors ++
+    allocErrors(top.env) ++
     checkRewritingHeaderDef(top.env) ++
     attachNote logicalLocationFromOrigin(e1) on
       checkStrategyType(e1.typerep, "<*")
@@ -39,9 +41,9 @@ top::Expr ::= e1::Expr e2::Expr
   
   forward fwrd =
     ableC_Expr {
-      GC_malloc_Sequence($Expr{@e1}, $Expr{@e2})
+      new Sequence($Expr{@e1}, $Expr{@e2})
     };
-  forwards to mkErrorCheck(localErrors, fwrd);
+  forwards to if null(localErrors) then @fwrd else errorExpr(localErrors);
 }
 
 abstract production actionExpr
@@ -51,6 +53,7 @@ top::Expr ::= p::ParameterDecl s::Stmt
   
   local localErrors::[Message] =
     p.errors ++ s.errors ++
+    allocErrors(top.env) ++
     checkRewritingHeaderDef(top.env);
   
   local typeIdDefs::Pair<Integer [Def]> = getTypeIdDefs(p.typerep, addEnv(p.defs, p.env));
@@ -64,7 +67,7 @@ top::Expr ::= p::ParameterDecl s::Stmt
       foldDecl([defsDecl(typeIdDefs.snd)]),
       ableC_Expr {
         proto_typedef type_id;
-        GC_malloc_Action(
+        new Action(
           $intLiteralExpr{typeIdDefs.fst},
           ({closure<($directTypeExpr{p.typerep}) -> void> _fn =
               lambda (
@@ -84,7 +87,7 @@ top::Expr ::= p::ParameterDecl s::Stmt
             *(struct generic_closure*)&_fn;}))
       });
   
-  forwards to mkErrorCheck(localErrors, fwrd);
+  forwards to if null(localErrors) then @fwrd else errorExpr(localErrors);
 }
 
 abstract production ruleExpr
@@ -95,14 +98,13 @@ top::Expr ::= ty::TypeName es::ExprClauses
   local localErrors::[Message] =
     ty.errors ++ es.errors ++
     (if !typeAssignableTo(ty.typerep, es.typerep)
-     then [errFromOrigin(top, s"Rule has type ${showType(ty.typerep)} but rhs has type ${showType(es.typerep)}")]
+     then [errFromOrigin(top, s"Rule has type ${show(80, ty.typerep)} but rhs has type ${show(80, es.typerep)}")]
      else []) ++
+    allocErrors(top.env) ++
     checkRewritingHeaderDef(top.env);
   
   local typeIdDefs::Pair<Integer [Def]> = getTypeIdDefs(ty.typerep, addEnv(ty.defs, ty.env));
-  
-  ty.env = top.env;
-  ty.controlStmtContext = top.controlStmtContext;
+
   es.initialEnv = es.transform.env;
   es.expectedTypes = [ty.typerep];
   es.transformIn = [ableC_Expr { _term }];
@@ -110,13 +112,13 @@ top::Expr ::= ty::TypeName es::ExprClauses
   
   forward fwrd =
     injectGlobalDeclsExpr(
-      foldDecl([defsDecl(typeIdDefs.snd)]),
+      consDecl(typePreDecls(@ty), consDecl(defsDecl(typeIdDefs.2), nilDecl())),
       ableC_Expr {
         proto_typedef type_id;
-        GC_malloc_Rule(
+        new Rule(
           $intLiteralExpr{typeIdDefs.fst},
-          ({closure<($BaseTypeExpr{typeModifierTypeExpr(ty.bty, ty.mty)} _term,
-                     $directTypeExpr{ty.typerep} *_result) -> _Bool> _fn =
+          ({closure<($directTypeExpr{ty.typerep} _term,
+                    $directTypeExpr{ty.typerep} *_result) -> _Bool> _fn =
               lambda ($directTypeExpr{ty.typerep} _term,
                       $directTypeExpr{ty.typerep} *_result) -> _Bool {
                 $directTypeExpr{ty.typerep} _match_result;
@@ -130,9 +132,9 @@ top::Expr ::= ty::TypeName es::ExprClauses
               };
             // Need to cast as a pointer due to C's restrictions on directly casting structs
             *(struct generic_closure*)&_fn;}))
-      });
+        });
   
-  forwards to mkErrorCheck(localErrors, fwrd);
+  forwards to if null(localErrors) then @fwrd else errorExpr(localErrors);
 }
 
 aspect function getInitialEnvDefs
@@ -143,62 +145,62 @@ aspect function getInitialEnvDefs
        "_rewrite_one",
        builtinFunctionValueItem(
          builtinType(nilQualifier(), voidType()),
-         rewriteCombinatorHandler(_, _, rewriteOneExpr))),
+         rewriteCombinatorHandler(rewriteOneExpr))),
      valueDef(
        "_rewrite_all",
        builtinFunctionValueItem(
          builtinType(nilQualifier(), voidType()),
-         rewriteCombinatorHandler(_, _, rewriteAllExpr)))];
+         rewriteCombinatorHandler(rewriteAllExpr)))];
 }
 
-function rewriteCombinatorHandler
-Expr ::= f::Name a::Exprs prod::(Expr ::= Expr Expr Expr)
+production rewriteCombinatorHandler implements ReferenceCall
+top::Expr ::= f::Name a::Exprs prod::(Expr ::= Expr Expr Expr Type)
 {
-  return
-    case a of
-    | consExpr(strat, consExpr(term, consExpr(result, nilExpr()))) ->
-      prod(strat, term, result)
-    | _ -> errorExpr([errFromOrigin(a, s"Wrong number of arguments to ${f.name}")])
-    end;
+  top.pp = pp"${f.pp}(${ppImplode(pp", ", a.pps)})";
+  forwards to bindDirectCallExpr(@f, @a,
+    case a.bindRefExprs of
+    | [strat, term, result] -> prod(strat, term, result, head(tail(a.typereps)))
+    | _ -> errorExpr([errFromOrigin(a, s"${f.name} expected 3 arguments")])
+    end);
 }
 
 -- These are only used internally by the rewrite library, so no error checking.
 -- For simplicity, it is assumed that all children here contain no definitions.
 abstract production rewriteOneExpr
-top::Expr ::= strat::Expr term::Expr result::Expr
+top::Expr ::= strat::Expr term::Expr result::Expr t::Type
 {
   top.pp = pp"_rewrite_one(${strat.pp}, ${term.pp}, ${result.pp})";
-  propagate env, controlStmtContext;
   
-  local t::Type = term.typerep;
-  t.componentRewriteCombineProd = orExpr;
-  t.componentRewriteDefault = ableC_Expr { (_Bool)0 };
+  nondecorated local traverseImpl::Expr =
+    t.traversalProd(
+      orExpr,  ableC_Expr { (_Bool)0 },
+      ^strat, ^term, ^result);
   
   forwards to
     ableC_Expr {
-      ({if ($Expr{result}) {
-          *$Expr{result} = $Expr{t.shallowCopyProd(term)};
+      ({if ($Expr{^result}) {
+          *$Expr{^result} = $Expr{t.shallowCopyProd(^term)};
         }
-        $Expr{t.componentRewriteProd(strat, term, result)};})
+        $Expr{traverseImpl};})
     };
 }
 
 abstract production rewriteAllExpr
-top::Expr ::= strat::Expr term::Expr result::Expr
+top::Expr ::= strat::Expr term::Expr result::Expr t::Type
 {
   top.pp = pp"_rewrite_all(${strat.pp}, ${term.pp}, ${result.pp})";
-  propagate env, controlStmtContext;
   
-  local t::Type = term.typerep;
-  t.componentRewriteCombineProd = andExpr;
-  t.componentRewriteDefault = ableC_Expr { (_Bool)1 };
+  nondecorated local traverseImpl::Expr =
+    t.traversalProd(
+      andExpr,  ableC_Expr { (_Bool)1 },
+      ^strat, ^term, ^result);
   
   forwards to
     ableC_Expr {
-      ({if ($Expr{result}) {
-          *$Expr{result} = $Expr{t.shallowCopyProd(term)};
+      ({if ($Expr{^result}) {
+          *$Expr{^result} = $Expr{t.shallowCopyProd(^term)};
         }
-        $Expr{t.componentRewriteProd(strat, term, result)};})
+        $Expr{traverseImpl};})
     };
 }
 
@@ -206,285 +208,195 @@ abstract production typeIdExpr
 top::Expr ::= ty::TypeName
 {
   top.pp = pp"_type_id(${ty.pp})";
-  propagate env, controlStmtContext;
   
   local typeIdDefs::Pair<Integer [Def]> = getTypeIdDefs(ty.typerep, addEnv(ty.defs, ty.env));
   
   forwards to
     ableC_Expr {
-      ({$Decl{
-          decls(
-            foldDecl(
-              injectGlobalDeclsDecl(foldDecl([defsDecl(typeIdDefs.snd)])) ::
-              ty.decls))}
+      ({$Decl{typePreDecls(@ty)}
+        $Decl{injectGlobalDeclsDecl(foldDecl([defsDecl(typeIdDefs.snd)]))}
         $intLiteralExpr{typeIdDefs.fst};})
     };
 }
 
 -- Component rewrite overload productions
-inherited attribute componentRewriteStrategy::Expr;
-inherited attribute componentRewriteTerm::Expr;
-inherited attribute componentRewriteResult::Expr;
-synthesized attribute componentRewriteTransform::Expr;
-inherited attribute componentRewriteTransformIn::Expr;
-
-abstract production rewriteStruct
-top::Expr ::= combineProd::(Expr ::= Expr Expr) defaultVal::Expr strat::Expr term::Expr result::Expr
+abstract production traverseStruct
+top::Expr ::= tagName::Maybe<String> refId::String combineProd::(Expr ::= Expr Expr) defaultVal::Expr strat::Expr term::Expr result::Expr
 {
-  top.pp = pp"rewriteADT(${strat.pp}, ${term.pp}, ${result.pp})";
-  propagate env, controlStmtContext;
-  
-  local structLookup::[RefIdItem] =
-    case term.typerep.maybeRefId of
-    | just(rid) -> lookupRefId(rid, top.env)
-    | nothing() -> []
-    end;
-  
-  local struct::Decorated StructDecl =
-    case structLookup of
-    | structRefIdItem(s) :: _ -> s
-    | _ -> error("Demanded struct decl when lookup failed")
-    end;
-  local newStruct::StructDecl = new(struct);
-  newStruct.isLast = struct.isLast;
-  newStruct.env = struct.env;
-  newStruct.localEnv = struct.localEnv;
-  newStruct.controlStmtContext = struct.controlStmtContext;
-  newStruct.inAnonStructItem = false;
-  newStruct.givenRefId = just(struct.refId);
-  newStruct.componentRewriteCombineProd = combineProd;
-  newStruct.componentRewriteDefault = defaultVal;
-  newStruct.componentRewriteStrategy = strat;
-  newStruct.componentRewriteTerm = term;
-  newStruct.componentRewriteResult = result;
-  
-  local localErrors::[Message] =
-    case term.typerep, structLookup of
-    | errorType(), _ -> []
+  top.pp = pp"traverseStruct(${strat.pp}, ${term.pp}, ${result.pp})";
+
+  forwards to
+    case lookupRefId(refId, top.env) of
+    | structRefIdItem(s) :: _ ->
+      s.traversalProd(combineProd, ^defaultVal, ^strat, ^term, ^result)
     -- Check that this struct has a definition
-    | extType(_, refIdExtType(_, id, _)), [] ->
-      [errFromOrigin(top, s"struct ${fromMaybe("<anon>", id)} does not have a definition.")]
-    | _, _ -> []
-    end ++
-    checkRewritingHeaderDef(top.env);
-  local fwrd::Expr = newStruct.componentRewriteTransform;
-  forwards to mkErrorCheck(localErrors, fwrd);
+    | _ -> errorExpr([errFromOrigin(top, s"struct ${fromMaybe("<anon>", tagName)} does not have a definition.")])
+    end;
 }
 
-attribute componentRewriteCombineProd, componentRewriteDefault, componentRewriteStrategy, componentRewriteTerm, componentRewriteResult, componentRewriteTransform
-  occurs on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
-
-propagate componentRewriteCombineProd, componentRewriteDefault, componentRewriteStrategy, componentRewriteTerm, componentRewriteResult
-  on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
+attribute traversalProd occurs on StructDecl, StructItemList, StructItem, StructDeclarators, StructDeclarator;
 
 aspect production structDecl
 top::StructDecl ::= attrs::Attributes  name::MaybeName  dcls::StructItemList
 {
-  top.componentRewriteTransform = dcls.componentRewriteTransform;
+  top.traversalProd = dcls.traversalProd;
 }
 
 aspect production consStructItem
 top::StructItemList ::= h::StructItem  t::StructItemList
 {
-  top.componentRewriteTransform = 
-    top.componentRewriteCombineProd(h.componentRewriteTransform, t.componentRewriteTransform);
+  top.traversalProd = combineTraversal(h.traversalProd, t.traversalProd);
 }
 aspect production nilStructItem
 top::StructItemList ::=
 {
-  top.componentRewriteTransform = top.componentRewriteDefault;
+  top.traversalProd = idTraversal;
 }
 
 aspect production structItem
 top::StructItem ::= attrs::Attributes  ty::BaseTypeExpr  dcls::StructDeclarators
 {
-  top.componentRewriteTransform = dcls.componentRewriteTransform;
+  top.traversalProd = dcls.traversalProd;
 }
 aspect production structItems
 top::StructItem ::= dcls::StructItemList
 {
-  top.componentRewriteTransform = dcls.componentRewriteTransform;
+  top.traversalProd = dcls.traversalProd;
 }
 aspect production anonStructStructItem
 top::StructItem ::= d::StructDecl
 {
-  top.componentRewriteTransform = d.componentRewriteTransform;
+  top.traversalProd = d.traversalProd;
 }
 aspect production anonUnionStructItem
 top::StructItem ::= d::UnionDecl
 {
-  top.componentRewriteTransform = top.componentRewriteDefault;
+  top.traversalProd = idTraversal;
 }
 aspect production warnStructItem
 top::StructItem ::= msg::[Message]
 {
-  top.componentRewriteTransform = top.componentRewriteDefault;
+  top.traversalProd = idTraversal;
 }
 
 aspect production consStructDeclarator
 top::StructDeclarators ::= h::StructDeclarator  t::StructDeclarators
 {
-  top.componentRewriteTransform = 
-    top.componentRewriteCombineProd(h.componentRewriteTransform, t.componentRewriteTransform);
+  top.traversalProd = combineTraversal(h.traversalProd, t.traversalProd);
 }
 aspect production nilStructDeclarator
 top::StructDeclarators ::=
 {
-  top.componentRewriteTransform = top.componentRewriteDefault;
+  top.traversalProd = idTraversal;
 }
 
 aspect production structField
 top::StructDeclarator ::= name::Name  ty::TypeModifierExpr  attrs::Attributes
 {
-  top.componentRewriteTransform =
+  top.traversalProd =
     if containsQualifier(constQualifier(), ty.typerep)
-    then top.componentRewriteDefault
-    else
+    then idTraversal
+    else \ combineProd defaultVal strat term result ->
       ableC_Expr {
         ({proto_typedef strategy;
           template<typename a> _Bool rewrite(const strategy s, const a term, a *const result);
-          rewrite(
-            $Expr{top.componentRewriteStrategy},
-            $Expr{top.componentRewriteTerm}.$Name{name},
-            $Expr{top.componentRewriteResult}?
-              &($Expr{top.componentRewriteResult}->$Name{name}) :
-              (void *)0);})
+          rewrite($Expr{strat}, $Expr{term}.$Name{^name},
+            $Expr{result}? &($Expr{result}->$Name{^name}) : (void *)0);})
       };
 }
 aspect production structBitfield
 top::StructDeclarator ::= name::MaybeName  ty::TypeModifierExpr  e::Expr  attrs::Attributes
 {
   -- Just ignore bitfields for now
-  top.componentRewriteTransform = top.componentRewriteDefault;
+  top.traversalProd = idTraversal;
 }
 aspect production warnStructField
 top::StructDeclarator ::= msg::[Message]
 {
-  top.componentRewriteTransform = top.componentRewriteDefault;
+  top.traversalProd = idTraversal;
 }
 
-abstract production rewriteADT
-top::Expr ::= combineProd::(Expr ::= Expr Expr) defaultVal::Expr strat::Expr term::Expr result::Expr
+abstract production traverseADT
+top::Expr ::= adtName::String refId::String combineProd::(Expr ::= Expr Expr) defaultVal::Expr strat::Expr term::Expr result::Expr
 {
-  top.pp = pp"rewriteADT(${strat.pp}, ${term.pp}, ${result.pp})";
-  propagate env, controlStmtContext;
-  
-  local adtName::Maybe<String> = term.typerep.adtName;
-  
-  local adtLookup::[RefIdItem] =
-    case term.typerep.maybeRefId of
-    | just(rid) -> lookupRefId(rid, top.env)
-    | nothing() -> []
+  top.pp = pp"traverseADT(${strat.pp}, ${term.pp}, ${result.pp})";
+
+  forwards to
+    case lookupRefId(refId, top.env) of
+    | adtRefIdItem(adt) :: _ ->
+      adt.traversalProd(combineProd, ^defaultVal, ^strat, ^term, ^result)
+    -- Check that this struct has a definition
+    | _ -> errorExpr([errFromOrigin(top, s"datatype ${adtName} does not have a definition.")])
     end;
-  
-  local adt::Decorated ADTDecl =
-    case adtLookup of
-    | adtRefIdItem(adt) :: _ -> adt
-    | _ -> error("ADT decl demanded when lookup failed")
-    end;
-  local newADT::ADTDecl = new(adt);
-  newADT.isTopLevel = adt.isTopLevel;
-  newADT.env = adt.env;
-  newADT.controlStmtContext = adt.controlStmtContext;
-  newADT.givenRefId = just(adt.refId);
-  newADT.adtGivenName = adt.adtGivenName;
-  newADT.componentRewriteCombineProd = combineProd;
-  newADT.componentRewriteDefault = defaultVal;
-  newADT.componentRewriteStrategy = strat;
-  newADT.componentRewriteTerm = term;
-  newADT.componentRewriteResult = result;
-  
-  local localErrors::[Message] =
-    case term.typerep, adtName, adtLookup of
-    | errorType(), _, _ -> []
-    -- Check that parameter type is an ADT of some sort
-    | t, nothing(), _ -> [errFromOrigin(top, s"rewrite expected a datatype (got ${showType(t)}).")]
-    -- Check that this ADT has a definition
-    | _, just(id), [] -> [errFromOrigin(top, s"datatype ${id} does not have a definition.")]
-    | _, just(id), _ -> []
-    end ++
-    checkRewritingHeaderDef(top.env);
-  local fwrd::Expr = newADT.componentRewriteTransform;
-  forwards to mkErrorCheck(localErrors, fwrd);
 }
 
-attribute componentRewriteCombineProd, componentRewriteDefault, componentRewriteStrategy, componentRewriteTerm, componentRewriteResult, componentRewriteTransform
-  occurs on ADTDecl, ConstructorList, Constructor, Parameters, ParameterDecl;
-attribute componentRewriteTransformIn occurs on Constructor;
-
-propagate componentRewriteCombineProd, componentRewriteDefault, componentRewriteStrategy, componentRewriteTerm, componentRewriteResult
-  on ADTDecl, ConstructorList, Constructor, Parameters, ParameterDecl;
+attribute traversalProd occurs on ADTDecl, ConstructorList, Constructor, Parameters, ParameterDecl;
+inherited attribute traversalProdIn::TraversalImpl occurs on Constructor;
 
 aspect production adtDecl
 top::ADTDecl ::= attrs::Attributes n::Name cs::ConstructorList
 {
-  top.componentRewriteTransform = cs.componentRewriteTransform;
+  top.traversalProd = cs.traversalProd;
 }
 
 aspect production consConstructor
 top::ConstructorList ::= c::Constructor cl::ConstructorList
 {
-  top.componentRewriteTransform = c.componentRewriteTransform;
-  c.componentRewriteTransformIn = cl.componentRewriteTransform;
+  top.traversalProd = c.traversalProd;
+  c.traversalProdIn = cl.traversalProd;
 }
 aspect production nilConstructor
 top::ConstructorList ::=
 {
-  top.componentRewriteTransform = top.componentRewriteDefault;
+  top.traversalProd = idTraversal;
 }
 
 aspect production constructor
 top::Constructor ::= n::Name ps::Parameters
 {
-  top.componentRewriteTransform =
+  top.traversalProd = \ combineProd defaultVal strat term result ->
     ableC_Expr {
-      $Expr{top.componentRewriteTerm}.tag == $name{enumItemName}?
-        $Expr{ps.componentRewriteTransform} :
-        $Expr{top.componentRewriteTransformIn}
+      $Expr{term}.tag == $name{enumItemName}?
+        $Expr{ps.traversalProd(combineProd, defaultVal, strat, term, result)} :
+        $Expr{top.traversalProdIn(combineProd, defaultVal, strat, term, result)}
     };
 }
 
 aspect production consParameters
 top::Parameters ::= h::ParameterDecl t::Parameters
 {
-  top.componentRewriteTransform =
-    top.componentRewriteCombineProd(h.componentRewriteTransform, t.componentRewriteTransform);
+  top.traversalProd = combineTraversal(h.traversalProd, t.traversalProd);
 }
 
 aspect production nilParameters
 top::Parameters ::=
 {
-  top.componentRewriteTransform = top.componentRewriteDefault;
+  top.traversalProd = idTraversal;
 }
 
 aspect production parameterDecl
 top::ParameterDecl ::= storage::StorageClasses  bty::BaseTypeExpr  mty::TypeModifierExpr  n::MaybeName  attrs::Attributes
 {
-  top.componentRewriteTransform =
+  top.traversalProd =
     if containsQualifier(constQualifier(), mty.typerep)
-    then top.componentRewriteDefault
-    else
+    then idTraversal
+    else \ combineProd defaultVal strat term result ->
       ableC_Expr {
         ({proto_typedef strategy;
           template<typename a> _Bool rewrite(const strategy s, const a term, a *const result);
-          rewrite(
-            $Expr{top.componentRewriteStrategy},
-            $Expr{top.componentRewriteTerm}.contents.$name{top.constructorName}.$Name{fieldName},
-            $Expr{top.componentRewriteResult}?
-              &($Expr{top.componentRewriteResult}->contents.$name{top.constructorName}.$Name{fieldName}) :
+          rewrite($Expr{strat},
+            $Expr{term}.contents.$name{top.constructorName}.$Name{fieldName},
+            $Expr{result}?
+              &($Expr{result}->contents.$name{top.constructorName}.$Name{fieldName}) :
               (void *)0);})
       };
 }
 
 -- Check the given env for the given function name
-function checkRewritingHeaderDef
-[Message] ::= env::Decorated Env
-{
-  return
-    if !null(lookupTemplate("rewrite", env))
-    then []
-    else [errFromOrigin(ambientOrigin(), "Missing include of rewriting.xh")];
-}
+fun checkRewritingHeaderDef [Message] ::= env::Env =
+  if !null(lookupTemplate("rewrite", env))
+  then []
+  else [errFromOrigin(ambientOrigin(), "Missing include of rewriting.xh")];
 
 -- Check that operand has rewriting type
 function checkStrategyType
@@ -499,6 +411,6 @@ function checkStrategyType
     case t, maybeRefId of
     | errorType(), _ -> []
     | _, just("edu:umn:cs:melt:exts:ableC:rewriting:strategy") -> []
-    | _, _ -> [errFromOrigin(ambientOrigin(), s"Operand to ${op} expected strategy type (got ${showType(t)})")]
+    | _, _ -> [errFromOrigin(ambientOrigin(), s"Operand to ${op} expected strategy type (got ${show(80, ^t)})")]
     end;
 }

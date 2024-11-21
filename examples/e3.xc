@@ -1,6 +1,7 @@
 #include <rewriting.xh>
 #include <substitution.xh>
 #include <string.xh>
+#include <alloca.h>
 
 typedef datatype Type ?Type;
 
@@ -11,44 +12,60 @@ datatype Type {
   Bool();
 };
 
-string showType(Type t) {
+size_t showTypeMaxLen(Type t);
+size_t showType(char *buf, Type t);
+show Type with showTypeMaxLen, showType;
+
+size_t showTypeMaxLen(Type t) {
   match (t) {
-    freevar -> {
-      char buffer[sizeof(short) * 2 + 2];
-      sprintf(buffer, "a%hx", (union {Type t; short n;}){.t = t}.n);
-      return str(buffer);
-    }
-    ?&Fn(param@?&Fn(_, _), res) -> {
-      return "(" + showType(param) + ") -> " + showType(res);
-    }
     ?&Fn(param, res) -> {
-      return showType(param) + " -> " + showType(res);
+      return showMaxLen(param) + showMaxLen(res) + 6;
     }
     ?&List(elem) -> {
-      return "[" + showType(elem) + "]";
+      return showMaxLen(elem) + 2;
     }
-    ?&Int() -> {
-      return str("int");
-    }
-    ?&Bool() -> {
-      return str("bool");
+    _ -> {
+      return 5;
     }
   }
 }
 
-show Type with showType;
-
-Type freshType() {
-  return freevar<datatype Type>(GC_malloc);
+size_t showType(char *buf, Type t) {
+  match (t) {
+    freevar -> {
+      return sprintf(buf, "a%hx", (union {Type t; short n;}){.t = t}.n);
+    }
+    ?&Fn(param@?&Fn(_, _), res) -> {
+      return buildStr(buf, "(" + show(param) + ") -> " + show(res));
+    }
+    ?&Fn(param, res) -> {
+      return buildStr(buf, show(param) + " -> " + show(res));
+    }
+    ?&List(elem) -> {
+      return buildStr(buf, "[" + show(elem) + "]");
+    }
+    ?&Int() -> {
+      return sprintf(buf, "int");
+    }
+    ?&Bool() -> {
+      return sprintf(buf, "bool");
+    }
+  }
 }
 
-Type freshenType(Type t) {
-  return freshen<Type, datatype Type>(t);
+Type freshType(arena_t ar) {
+  allocate_using arena ar;
+  return new var<datatype Type>();
 }
 
-Type appType(Type f, Type a) {
-  Type res = freshType();
+Type freshenType(Type t, arena_t ar) {
+  return freshen<Type, datatype Type>(t, ar);
+}
+
+Type appType(Type f, Type a, arena_t ar) {
+  Type res = freshType(ar);
   if (!unify(f, Fn(a, res))) {
+    allocate_using stack;
     printf("Type error applying %s to %s\n", show(f).text, show(a).text);
     exit(1);
   }
@@ -56,21 +73,23 @@ Type appType(Type f, Type a) {
 }
 
 int main() {
-  Type foldr = term<Type>(alloca) { Fn(Fn(A, Fn(B, B)), Fn(B, Fn(List(A), B))) };
-  Type add = term<Type>(alloca) { Fn(Int(), Fn(Int(), Int())) };
-  Type map = term<Type>(alloca) { Fn(Fn(A, B), Fn(List(A), List(B))) };
-  Type null = term<Type>(alloca) { Fn(List(A), Bool()) };
-  
-  printf("foldr :: %s\n", show(foldr).text);
-  printf("add :: %s\n", show(add).text);
-  printf("map :: %s\n", show(map).text);
-  printf("null :: %s\n", show(null).text);
+  with_arena ar {
+    Type foldr = term<Type>{ Fn(Fn(A, Fn(B, B)), Fn(B, Fn(List(A), B))) };
+    Type add = term<Type> { Fn(Int(), Fn(Int(), Int())) };
+    Type map = term<Type> { Fn(Fn(A, B), Fn(List(A), List(B))) };
+    Type null = term<Type> { Fn(List(A), Bool()) };
+    
+    printf("foldr :: %s\n", show(foldr).text);
+    printf("add :: %s\n", show(add).text);
+    printf("map :: %s\n", show(map).text);
+    printf("null :: %s\n", show(null).text);
 
-  Type sum = appType(appType(freshenType(foldr), freshenType(add)), term<Type>(alloca){ Int() });
-  Type innerSum = appType(freshenType(map), appType(freshenType(map), freshenType(sum)));
-  printf("sum :: %s\n", show(sum).text);
-  printf("innerSum :: %s\n", show(innerSum).text);
+    Type sum = appType(appType(freshenType(foldr, ar), freshenType(add, ar), ar), term<Type>{ Int() }, ar);
+    Type innerSum = appType(freshenType(map, ar), appType(freshenType(map, ar), freshenType(sum, ar), ar), ar);
+    printf("sum :: %s\n", show(sum).text);
+    printf("innerSum :: %s\n", show(innerSum).text);
 
-  // Type error
-  //appType(freshenType(innerSum), term<Type>(alloca){ Int() });
+    // Type error
+    //appType(freshenType(innerSum, ar), term<Type>{ Int() }, ar);
+  }
 }

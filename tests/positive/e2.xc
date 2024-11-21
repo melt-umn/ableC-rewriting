@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdarg.h>
+#include <alloca.h>
 
 template<typename a>
 datatype List {
@@ -10,27 +11,27 @@ datatype List {
   Nil();
 };
 
-template allocate datatype List with GC_malloc;
-
 template<typename a>
-List<a> *append(List<a> *l1, List<a> *l2) {
+List<a> *append(List<a> *l1, List<a> *l2, arena_t ar) {
+  allocate_using arena ar;
   return match (l1)
-    (&Cons(h, t) -> GC_malloc_Cons(h, append(t, l2));
+    (&Cons(h, t) -> new Cons(h, append(t, l2, ar));
      &Nil() -> l2;);
 }
 
 template<typename a>
-List<a> *buildList(size_t n, ...) {
+List<a> *buildList(size_t n, arena_t ar, ...) {
+  allocate_using arena ar;
   va_list args;
-  va_start(args, n);
+  va_start(args, ar);
   a inputs[n];
   for (size_t i = 0; i < n; i++) {
     inputs[i] = va_arg(args, a);
   }
   va_end(args);
-  List<a> *result = GC_malloc_Nil<a>();
+  List<a> *result = new Nil<a>();
   for (size_t i = 0; i < n; i++) {
-    result = GC_malloc_Cons(inputs[n - (i + 1)], result);
+    result = new Cons(inputs[n - (i + 1)], result);
   }
   return result;
 }
@@ -65,9 +66,6 @@ datatype Stmt {
   If(Expr c, List<Stmt> *t, List<Stmt> *e);
   While(Expr c, List<Stmt> *b);
 };
-
-allocate datatype Expr with GC_malloc;
-allocate datatype Stmt with GC_malloc;
 
 bool stmtListHasBinding(const char *n, List<Stmt> *s);
 bool stmtHasBinding(const char *n, Stmt s) {
@@ -115,63 +113,67 @@ bool stmtListHasFreeVar(const char *n, List<Stmt> *s) {
      &Nil() -> false;);
 }
 
-strategy substitute(const char *n, Value v) {
-  return allTopDown(rule (Expr) {
+strategy substitute(const char *n, Value v, arena_t ar) {
+  allocate_using arena ar;
+  return allTopDown(
+    rule (Expr) {
       Var(n1) @ when(!strcmp(n, n1)) -> Const(v);
     } <+ rule (Stmt) {
       w @ While(c, b) @ when(stmtListHasBinding(n, b)) -> ({
           Expr newC; List<Stmt> *newB;
-          rewrite(substitute(n, v), c, &newC);
-          rewrite(substitute(n, v), b, &newB);
-          If(newC, append(newB, GC_malloc_Cons(w, GC_malloc_Nil<Stmt>())),
-             GC_malloc_Nil<Stmt>());
+          rewrite(substitute(n, v, ar), c, &newC);
+          rewrite(substitute(n, v, ar), b, &newB);
+          If(newC, append(newB, new Cons(w, new Nil<Stmt>()), ar),
+             new Nil<Stmt>());
         });
     } <+ rule (List<Stmt>) {
       Cons(h, t) @ when(stmtHasBinding(n, h)) -> ({
           Stmt newH;
-          rewrite(substitute(n, v), h, &newH);
+          rewrite(substitute(n, v, ar), h, &newH);
           Cons(newH, t);
         });
-    });
+    }, ar);
 }
 
-string evaluate(List<Stmt> *prog) {
-  strategy eval = outermost(rule (List<Stmt> *) {
-        &Cons(Assign(n, e), s) @when(!stmtListHasFreeVar(n, s)) -> s;
-        &Cons(a@Assign(n, Const(v)), s) -> ({
-            List<Stmt> *newS;
-            rewrite(substitute(n, v), s, &newS);
-            newS;
-          });
-        &Cons(Print(Const(String(a1))), &Cons(Print(Const(String(a2))), s)) -> ({
-            char *a3 = GC_malloc(strlen(a1) + strlen(a2) + 2);
-            sprintf(a3, "%s\n%s", a1, a2);
-            GC_malloc_Cons(Print(Const(String(a3))), s);
-          });
-        &Cons(a@Assign(_, _), &Cons(p@Print(Const(_)), s)) -> GC_malloc_Cons(p, GC_malloc_Cons(a, s));
-        &Cons(If(Const(Int(0)), _, s1), s2) -> append(s1, s2);
-        &Cons(If(Const(Int(_)), s1, _), s2) -> append(s1, s2);
-      } <+ rule (Expr) {
-        ToString(&Const(Int(a1))) -> ({
-            char *a2 = GC_malloc(20);
-            sprintf(a2, "%d", a1);
-            Const(String(a2));
-          });
-        Minus(&Const(Int(a1))) -> Const(Int(-a1));
-        Add(&Const(Int(a1)), &Const(Int(a2))) -> Const(Int(a1 + a2));
-        Add(&Const(String(a1)), &Const(String(a2))) -> ({
-            char *a3 = GC_malloc(strlen(a1) + strlen(a2) + 1);
-            sprintf(a3, "%s%s", a1, a2);
-            Const(String(a3));
-          });
-        Sub(&Const(Int(a1)), &Const(Int(a2))) -> Const(Int(a1 - a2));
-        Mul(&Const(Int(a1)), &Const(Int(a2))) -> Const(Int(a1 * a2));
-        Div(&Const(Int(a1)), &Const(Int(a2))) -> Const(Int(a1 / a2));
-        Equals(&Const(Int(a1)), &Const(Int(a2))) -> Const(Int(a1 == a2));
-        Not(&Const(Int(a1))) -> Const(Int(!a1));
-        And(&Const(Int(a1)), &Const(Int(a2))) -> Const(Int(a1 && a2));
-        Or(&Const(Int(a1)), &Const(Int(a2))) -> Const(Int(a1 || a2));
-      });
+string evaluate(List<Stmt> *prog, arena_t ar) {
+  allocate_using arena ar;
+  strategy eval = outermost(
+    rule (List<Stmt> *) {
+      &Cons(Assign(n, e), s) @when(!stmtListHasFreeVar(n, s)) -> s;
+      &Cons(a@Assign(n, Const(v)), s) -> ({
+          List<Stmt> *newS;
+          rewrite(substitute(n, v, ar), s, &newS);
+          newS;
+        });
+      &Cons(Print(Const(String(a1))), &Cons(Print(Const(String(a2))), s)) -> ({
+          char *a3 = allocate(strlen(a1) + strlen(a2) + 2);
+          sprintf(a3, "%s\n%s", a1, a2);
+          new Cons(Print(Const(String(a3))), s);
+        });
+      &Cons(a@Assign(_, _), &Cons(p@Print(Const(_)), s)) -> new Cons(p, new Cons(a, s));
+      &Cons(If(Const(Int(0)), _, s1), s2) -> append(s1, s2, ar);
+      &Cons(If(Const(Int(_)), s1, _), s2) -> append(s1, s2, ar);
+    } <+ rule (Expr) {
+      ToString(&Const(Int(a1))) -> ({
+          char *a2 = allocate(20);
+          sprintf(a2, "%d", a1);
+          Const(String(a2));
+        });
+      Minus(&Const(Int(a1))) -> Const(Int(-a1));
+      Add(&Const(Int(a1)), &Const(Int(a2))) -> Const(Int(a1 + a2));
+      Add(&Const(String(a1)), &Const(String(a2))) -> ({
+          char *a3 = allocate(strlen(a1) + strlen(a2) + 1);
+          sprintf(a3, "%s%s", a1, a2);
+          Const(String(a3));
+        });
+      Sub(&Const(Int(a1)), &Const(Int(a2))) -> Const(Int(a1 - a2));
+      Mul(&Const(Int(a1)), &Const(Int(a2))) -> Const(Int(a1 * a2));
+      Div(&Const(Int(a1)), &Const(Int(a2))) -> Const(Int(a1 / a2));
+      Equals(&Const(Int(a1)), &Const(Int(a2))) -> Const(Int(a1 == a2));
+      Not(&Const(Int(a1))) -> Const(Int(!a1));
+      And(&Const(Int(a1)), &Const(Int(a2))) -> Const(Int(a1 && a2));
+      Or(&Const(Int(a1)), &Const(Int(a2))) -> Const(Int(a1 || a2));
+    }, ar);
 
   List<Stmt> *result;
   if (!rewrite(eval, prog, &result)) {
@@ -190,38 +192,42 @@ string evaluate(List<Stmt> *prog) {
 }
 
 int main() {
-  List<Stmt> *progs[] = {
-    buildList<Stmt>(2, Assign("a", Const(String("Hello, world!"))), Print(Var("a"))),
-    buildList<Stmt>(2,
-                    Assign("n", Const(Int(0))),
-                    While(Not(GC_malloc_Equals(GC_malloc_Var("n"), GC_malloc_Const(Int(10)))),
-                          buildList<Stmt>(2,
-                                          Print(ToString(GC_malloc_Var("n"))),
-                                          Assign("n", Add(GC_malloc_Var("n"), GC_malloc_Const(Int(1))))))),
-    buildList<Stmt>(4,
-                    Assign("a", Const(Int(0))),
-                    Assign("b", Const(Int(1))),
-                    Assign("n", Const(Int(10))),
-                    While(Var("n"),
-                          buildList<Stmt>(5,
-                                          Print(ToString(GC_malloc_Var("a"))),
-                                          Assign("c", Add(GC_malloc_Var("a"), GC_malloc_Var("b"))),
-                                          Assign("a", Var("b")),
-                                          Assign("b", Var("c")),
-                                          Assign("n", Sub(GC_malloc_Var("n"), GC_malloc_Const(Int(1))))))),
-    buildList<Stmt>(2, Print(Var("x")), Assign("y", Const(Int(2))))
-  };
-  const char *expected[] = {
-    "Hello, world!",
-    "0\n1\n2\n3\n4\n5\n6\n7\n8\n9",
-    "0\n1\n1\n2\n3\n5\n8\n13\n21\n34",
-    "&Cons(Print(Var(\"x\")), &Nil())"
-  };
-  for (int i = 0; i < sizeof(progs) / sizeof(Stmt*); i++) {
-    printf("%s\n", show(progs[i]).text);
-    string res = evaluate(progs[i]);
-    if (res != expected[i]) {
-      return i + 1;
+  with_arena ar {
+    List<Stmt> *progs[] = {
+      buildList<Stmt>(2, ar, Assign("a", Const(String("Hello, world!"))), Print(Var("a"))),
+      buildList<Stmt>(2, ar,
+                      Assign("n", Const(Int(0))),
+                      While(Not(new Equals(new Var("n"), new Const(Int(10)))),
+                            buildList<Stmt>(2, ar,
+                                            Print(ToString(new Var("n"))),
+                                            Assign("n", Add(new Var("n"), new Const(Int(1))))))),
+      buildList<Stmt>(4, ar,
+                      Assign("a", Const(Int(0))),
+                      Assign("b", Const(Int(1))),
+                      Assign("n", Const(Int(10))),
+                      While(Var("n"),
+                            buildList<Stmt>(5, ar,
+                                            Print(ToString(new Var("a"))),
+                                            Assign("c", Add(new Var("a"), new Var("b"))),
+                                            Assign("a", Var("b")),
+                                            Assign("b", Var("c")),
+                                            Assign("n", Sub(new Var("n"), new Const(Int(1))))))),
+      buildList<Stmt>(2, ar, Print(Var("x")), Assign("y", Const(Int(2))))};
+    const char *expected[] = {
+      "Hello, world!",
+      "0\n1\n2\n3\n4\n5\n6\n7\n8\n9",
+      "0\n1\n1\n2\n3\n5\n8\n13\n21\n34",
+      "&Cons(Print(Var(\"x\")), &Nil())"
+    };
+    for (int i = 0; i < sizeof(progs) / sizeof(Stmt*); i++) {
+      with_arena evalAr {
+        printf("%s\n", show(progs[i]).text);
+        string res = evaluate(progs[i], evalAr);
+        if (res != expected[i]) {
+          printf("Expect: %s\n", expected[i]);
+          return i + 1;
+        }
+      }
     }
   }
 }

@@ -6,3 +6,5 @@ exports edu:umn:cs:melt:exts:ableC:rewriting:abstractsyntax;
 exports edu:umn:cs:melt:exts:ableC:templating;
 exports edu:umn:cs:melt:exts:ableC:algebraicDataTypes;
 exports edu:umn:cs:melt:exts:ableC:closure;
+exports edu:umn:cs:melt:exts:ableC:allocation;
+exports edu:umn:cs:melt:exts:ableC:constructor;

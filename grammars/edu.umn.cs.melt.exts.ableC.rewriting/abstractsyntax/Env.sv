@@ -3,33 +3,33 @@ grammar edu:umn:cs:melt:exts:ableC:rewriting:abstractsyntax;
 -- Track in the global environment the run-time type identifiers assigned statically to each type.
 synthesized attribute typeIds::Scopes<Integer> occurs on Env;
 
-aspect production emptyEnv_i
+aspect production emptyEnv
 top::Env ::=
 {
   top.typeIds = emptyScope();
 }
-aspect production addEnv_i
-top::Env ::= d::Defs  e::Decorated Env
+aspect production addDefsEnv
+top::Env ::= d::Defs  e::Env
 {
   top.typeIds = addGlobalScope(gd.typeIdContribs, addScope(d.typeIdContribs, e.typeIds));
 }
-aspect production openScopeEnv_i
-top::Env ::= e::Decorated Env
+aspect production openScopeEnv
+top::Env ::= e::Env
 {
   top.typeIds = openScope(e.typeIds);
 }
-aspect production globalEnv_i
-top::Env ::= e::Decorated Env
+aspect production globalEnv
+top::Env ::= e::Env
 {
   top.typeIds = globalScope(e.typeIds);
 }
-aspect production nonGlobalEnv_i
-top::Env ::= e::Decorated Env
+aspect production nonGlobalEnv
+top::Env ::= e::Env
 {
   top.typeIds = nonGlobalScope(e.typeIds);
 }
-aspect production functionEnv_i
-top::Env ::= e::Decorated Env
+aspect production functionEnv
+top::Env ::= e::Env
 {
   top.typeIds = functionScope(e.typeIds);
 }
@@ -60,7 +60,7 @@ top::Def ::= s::String  t::Integer
 }
 
 function getTypeIdDefs
-Pair<Integer [Def]> ::= t::Type  e::Decorated Env
+Pair<Integer [Def]> ::= t::Type  e::Env
 {
   local typeIds::[Integer] = lookupScope(t.mangledName, e.typeIds);
   local typeId::Integer =
@@ -69,7 +69,7 @@ Pair<Integer [Def]> ::= t::Type  e::Decorated Env
     -- TODO: Theoretically the id should only be in the environment once, but there is a bug
     -- somewhere with lifting
     --| [id] -> id
-    --| ids -> error(s"Found multiple type id entires for ${showType(t)}: ${hackUnparse(ids)}")
+    --| ids -> error(s"Found multiple type id entires for ${show(80, t)}: ${hackUnparse(ids)}")
     | id :: _ -> id
     end;
   

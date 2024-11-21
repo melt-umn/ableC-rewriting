@@ -9,8 +9,6 @@ datatype Set {
   Leaf();
 };
 
-template allocate datatype Set with GC_malloc;
-
 template<typename a, int (*cmp)(a, a)>
 bool setContains(Set<a, cmp> *set, a item) {
   match (set) {
@@ -29,22 +27,24 @@ bool setContains(Set<a, cmp> *set, a item) {
 }
 
 template<typename a, int (*cmp)(a, a)>
-Set<a, cmp> *setEmpty(void) {
-  return GC_malloc_Leaf<a, cmp>();
+Set<a, cmp> *setEmpty(arena_t ar) {
+  allocate_using arena ar;
+  return new Leaf<a, cmp>();
 }
 
 template<typename a, int (*cmp)(a, a)>
-Set<a, cmp> *setUnion(Set<a, cmp> *set1, Set<a, cmp> *set2) {
+Set<a, cmp> *setUnion(Set<a, cmp> *set1, Set<a, cmp> *set2, arena_t ar) {
+  allocate_using arena ar;
   match (set1, set2) {
     &Node(item1, left1, right1), &Node(item2, left2, right2) -> {
       int diff = cmp(item1, item2);
       if (diff < 0) {
-        return GC_malloc_Node(item1, setUnion(left1, set2), right1);
+        return new Node(item1, setUnion(left1, set2, ar), right1);
       } else if (diff > 0) {
-        return GC_malloc_Node(item1, left1, setUnion(right1, set2));
+        return new Node(item1, left1, setUnion(right1, set2, ar));
       } else {
         // Both sets contain the same root item
-        return GC_malloc_Node(item1, setUnion(left1, left2), setUnion(right1, right2));
+        return new Node(item1, setUnion(left1, left2, ar), setUnion(right1, right2, ar));
       }
     }
     _, &Leaf() -> {
@@ -57,14 +57,15 @@ Set<a, cmp> *setUnion(Set<a, cmp> *set1, Set<a, cmp> *set2) {
 }
 
 template<typename a, int (*cmp)(a, a)>
-Set<a, cmp> *setInsert(Set<a, cmp> *set, a item) {
+Set<a, cmp> *setInsert(Set<a, cmp> *set, a item, arena_t ar) {
+  allocate_using arena ar;
   match (set) {
     &Node(item1, left, right) -> {
       int diff = cmp(item1, item);
       if (diff < 0) {
-        return setInsert(left, item);
+        return setInsert(left, item, ar);
       } else if (diff > 0) {
-        return setInsert(right, item);
+        return setInsert(right, item, ar);
       } else {
         // item found in set
         return set;
@@ -72,23 +73,24 @@ Set<a, cmp> *setInsert(Set<a, cmp> *set, a item) {
     }
     &Leaf() -> {
       // item not in set
-      return GC_malloc_Node(item, set, set);
+      return new Node(item, set, set);
     }
   }
 }
 
 template<typename a, int (*cmp)(a, a)>
-Set<a, cmp> *setRemove(Set<a, cmp> *set, a item) {
+Set<a, cmp> *setRemove(Set<a, cmp> *set, a item, arena_t ar) {
+  allocate_using arena ar;
   match (set) {
     &Node(item1, left, right) -> {
       int diff = cmp(item1, item);
       if (diff < 0) {
-        return setRemove(left, item);
+        return setRemove(left, item, ar);
       } else if (diff > 0) {
-        return setRemove(right, item);
+        return setRemove(right, item, ar);
       } else {
         // item found in set
-        return setUnion(left, right);
+        return setUnion(left, right, ar);
       }
     }
     &Leaf() -> {
@@ -106,26 +108,26 @@ datatype Term {
   Lambda(const char *n, Term *a);
 }
 
-allocate datatype Term with GC_malloc;
-
-Set<const char *, strcmp> *getFreeVars(Term *term) {
+Set<const char *, strcmp> *getFreeVars(Term *term, arena_t ar) {
+  allocate_using arena ar;
   return match (term)
-    (&Var(n) -> setInsert(setEmpty<const char *, strcmp>(), n);
-     &Apply(a, b) -> setUnion(getFreeVars(a), getFreeVars(b));
-     &Lambda(n, a) -> setRemove(getFreeVars(a), n););
+    (&Var(n) -> setInsert(setEmpty<const char *, strcmp>(ar), n, ar);
+     &Apply(a, b) -> setUnion(getFreeVars(a, ar), getFreeVars(b, ar), ar);
+     &Lambda(n, a) -> setRemove(getFreeVars(a, ar), n, ar););
 }
 
 // term[n/a]
-strategy substitute(const char *n, Term *a) {
-  Set<const char *, strcmp> *freeVars = getFreeVars(a);
+strategy substitute(const char *n, Term *a, arena_t ar) {
+  allocate_using arena ar;
+  Set<const char *, strcmp> *freeVars = getFreeVars(a, ar);
   
   strategy alphaRename = rule (Term) {
     Lambda(m, b) @ when(setContains(freeVars, m)) -> ({
         static unsigned count = 0;
-        char *freshVar = GC_malloc(10);
+        char *freshVar = arena_malloc(ar, 10);
         sprintf(freshVar, "_%u", count++);
         Term *freshTerm;
-        rewrite(substitute(m, GC_malloc_Var(freshVar)), b, &freshTerm);
+        rewrite(substitute(m, new Var(freshVar), ar), b, &freshTerm);
         Lambda(freshVar, freshTerm);
       });
   };
@@ -135,22 +137,23 @@ strategy substitute(const char *n, Term *a) {
     t @ &Lambda(m, _) @ when(!strcmp(n, m)) -> t;
   };
   
-  return rec(lambda (strategy self) -> try(alphaRename) <* (sub <+ try(all(self))));
+  return rec(lambda (strategy self) -> try(alphaRename, ar) <* (sub <+ try(all(self, ar), ar)), ar);
 }
 
-strategy betaReduce() {
+strategy betaReduce(arena_t ar) {
+  allocate_using arena ar;
   return rule (Term *) {
     &Apply(&Lambda(n, a), b) -> ({
         Term *result;
-        rewrite(substitute(n, b), a, &result);
+        rewrite(substitute(n, b, ar), a, &result);
         result;
       });
   };
 }
 
-Term *normalize(Term *term) {
+Term *normalize(Term *term, arena_t ar) {
   Term *result;
-  rewrite(outermost(betaReduce()), term, &result);
+  rewrite(outermost(betaReduce(ar), ar), term, &result);
   return result;
 }
 
@@ -201,31 +204,32 @@ void printTerm(Term *term) {
   }
 }
 
-allocate datatype Term with alloca;
-
 int main() {
-  Term *succ = alloca_Lambda("n", alloca_Lambda("f", alloca_Lambda("x", alloca_Apply(alloca_Var("f"), alloca_Apply(alloca_Apply(alloca_Var("n"), alloca_Var("f")), alloca_Var("x"))))));
-  Term *plus = alloca_Lambda("m", alloca_Lambda("n", alloca_Lambda("f", alloca_Lambda("x", alloca_Apply(alloca_Apply(alloca_Var("m"), alloca_Var("f")), alloca_Apply(alloca_Apply(alloca_Var("n"), alloca_Var("f")), alloca_Var("x")))))));
+  allocate_using heap;
+  Term *succ = new Lambda("n", new Lambda("f", new Lambda("x", new Apply(new Var("f"), new Apply(new Apply(new Var("n"), new Var("f")), new Var("x"))))));
+  Term *plus = new Lambda("m", new Lambda("n", new Lambda("f", new Lambda("x", new Apply(new Apply(new Var("m"), new Var("f")), new Apply(new Apply(new Var("n"), new Var("f")), new Var("x")))))));
 
-  Term *zero = alloca_Lambda("f", alloca_Lambda("x", alloca_Var("x")));
-  Term *one = alloca_Apply(succ, zero);
-  Term *two = alloca_Apply(succ, one);
-  Term *three = alloca_Apply(succ, two);
+  Term *zero = new Lambda("f", new Lambda("x", new Var("x")));
+  Term *one = new Apply(succ, zero);
+  Term *two = new Apply(succ, one);
+  Term *three = new Apply(succ, two);
   
-  Term *terms[] = {alloca_Apply(alloca_Lambda("foo", alloca_Var("foo")), alloca_Lambda("a", alloca_Var("a"))),
-                   alloca_Apply(alloca_Lambda("a", alloca_Lambda("b", alloca_Var("a"))), alloca_Var("b")),
-                   alloca_Lambda("a", alloca_Lambda("b", alloca_Apply(alloca_Lambda("a", alloca_Var("b")), alloca_Var("a")))),
+  Term *terms[] = {new Apply(new Lambda("foo", new Var("foo")), new Lambda("a", new Var("a"))),
+                   new Apply(new Lambda("a", new Lambda("b", new Var("a"))), new Var("b")),
+                   new Lambda("a", new Lambda("b", new Apply(new Lambda("a", new Var("b")), new Var("a")))),
                    plus,
                    zero, one, two, three,
-                   alloca_Apply(alloca_Apply(plus, two), three)};
+                   new Apply(new Apply(plus, two), three)};
   for (int i = 0; i < sizeof(terms) / sizeof(Term*); i++) {
     printTerm(terms[i]);
     printf(": ");
-    Term *res = normalize(terms[i]);
-    if (res != NULL)
-      printTerm(res);
-    else 
-      printf("Fail");
+    with_arena ar {
+      Term *res = normalize(terms[i], ar);
+      if (res != NULL)
+        printTerm(res);
+      else 
+        printf("Fail");
+    }
     printf("\n");
   }
 }

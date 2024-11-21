@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <gc.h>
+#include <arena.h>
 #include <string.xh>
 
 #ifndef _REWRITING_XH
@@ -18,28 +18,41 @@ typedef unsigned long type_id;
 typedef __attribute__((refId("edu:umn:cs:melt:exts:ableC:rewriting:strategy")))
   datatype strategy *strategy;
 
+static inline size_t _showArenaMaxLen(arena_t ar) {
+  return MAX_POINTER_STR_LEN + 8;
+}
+static inline size_t _showArenaToBuf(char *buf, arena_t ar) {
+  return sprintf(buf, "<arena %p>", ar);
+}
+show arena_t with _showArenaMaxLen, _showArenaToBuf;
+
+static inline size_t _showRecMaxLen(closure<(strategy) -> strategy> f) {
+  return showMaxLen(*(struct generic_closure *)&f);
+}
+static inline size_t _showRecToBuf(char *buf, closure<(strategy) -> strategy> f) {
+  return showToBuf(buf, *(struct generic_closure *)&f);
+}
+show(closure<(strategy) -> strategy>) with _showRecMaxLen, _showRecToBuf;
+
 datatype strategy {
   Fail();
   Id();
   Choice(strategy s1, strategy s2);
   Sequence(strategy s1, strategy s2);
   Neg(strategy s);
-  One(strategy s);
-  All(strategy s);
+  One(strategy s, arena_t ar);
+  All(strategy s, arena_t ar);
   Rec(closure<(strategy) -> strategy> f);
   Action(type_id id, struct generic_closure f);
   Rule(type_id id, struct generic_closure f);
 };
 
-static inline string _showRec(closure<(strategy) -> strategy> f) {
-  return show(*(struct generic_closure *)&f);
-}
-show(closure<(strategy) -> strategy>) with _showRec;
-
 template<typename a>
 _Bool rewrite(const strategy s, const a term, a *const result) {
 #ifdef DEBUG_TRACE_REWRITE
-  printf("Rewriting %s with %s\n", show(term).text, show(s).text);
+  with_arena tmp {
+    printf("Rewriting %s with %s\n", show(term).text, show(s).text);
+  }
 #endif
   match (s) {
     &Fail() -> {
@@ -61,10 +74,12 @@ _Bool rewrite(const strategy s, const a term, a *const result) {
     &Neg(s) -> {
       return !rewrite(s, term, NULL);
     }
-    &One(s) -> {
+    &One(s, ar) -> {
+      allocate_using arena ar;
       return _rewrite_one(s, term, result);
     }
-    &All(s) -> {
+    &All(s, ar) -> {
+      allocate_using arena ar;
       return _rewrite_all(s, term, result);
     }
     &Rec(f) -> {
@@ -87,7 +102,9 @@ _Bool rewrite(const strategy s, const a term, a *const result) {
       }
     }
     _ -> {
-      fprintf(stderr, "Invalid strategy to rewrite: %s\n", show(s).text);
+      with_arena tmp {
+        fprintf(stderr, "Invalid strategy to rewrite: %s\n", show(s).text);
+      }
       abort();
     }
   }
@@ -97,51 +114,72 @@ _Bool rewrite(const strategy s, const a term, a *const result) {
 static datatype strategy fail[] = {{.tag = strategy_Fail}};
 static datatype strategy id[] = {{.tag = strategy_Id}};
 
-allocate datatype strategy with GC_malloc;
-static inline strategy neg(strategy s) { return GC_malloc_Neg(s); }
-static inline strategy one(strategy s) { return GC_malloc_One(s); }
-static inline strategy all(strategy s) { return GC_malloc_All(s); }
-static inline strategy rec(closure<(strategy) -> strategy> f) { return GC_malloc_Rec(f); }
+static inline strategy neg(strategy s, arena_t ar) {
+  allocate_using arena ar;
+  return new Neg(s);
+}
+static inline strategy one(strategy s, arena_t ar) {
+  allocate_using arena ar;
+  return new One(s, ar);
+}
+static inline strategy all(strategy s, arena_t ar) {
+  allocate_using arena ar;
+  return new All(s, ar);
+}
+static inline strategy rec(closure<(strategy) -> strategy> f, arena_t ar) {
+  allocate_using arena ar;
+  return new Rec(f);
+}
 
 // Generally useful strategy constructors
-static inline strategy try(strategy s) {
+static inline strategy try(strategy s, arena_t ar) {
+  allocate_using arena ar;
   return s <+ id;
 }
 
-static inline strategy repeat(strategy s) {
-  return rec(lambda (strategy self) -> try(s <* self));
+static inline strategy repeat(strategy s, arena_t ar) {
+  allocate_using arena ar;
+  return rec(lambda (strategy self) -> try(s <* self, ar), ar);
 }
 
-static inline strategy bottomUp(strategy s) {
-  return rec(lambda (strategy self) -> all(self) <* s);
+static inline strategy bottomUp(strategy s, arena_t ar) {
+  allocate_using arena ar;
+  return rec(lambda (strategy self) -> all(self, ar) <* s, ar);
 }
 
-static inline strategy topDown(strategy s) {
-  return rec(lambda (strategy self) -> s <* all(self));
+static inline strategy topDown(strategy s, arena_t ar) {
+  allocate_using arena ar;
+  return rec(lambda (strategy self) -> s <* all(self, ar), ar);
 }
 
-static inline strategy downUp(strategy s1, strategy s2) {
-  return rec(lambda (strategy self) -> s1 <* all(self) <* s2);
+static inline strategy downUp(strategy s1, strategy s2, arena_t ar) {
+  allocate_using arena ar;
+  return rec(lambda (strategy self) -> s1 <* all(self, ar) <* s2, ar);
 }
 
-static inline strategy onceBottomUp(strategy s) {
-  return rec(lambda (strategy self) -> one(self) <+ s);
+static inline strategy onceBottomUp(strategy s, arena_t ar) {
+  allocate_using arena ar;
+  return rec(lambda (strategy self) -> one(self, ar) <+ s, ar);
 }
 
-static inline strategy onceTopDown(strategy s) {
-  return rec(lambda (strategy self) -> s <+ one(self));
+static inline strategy onceTopDown(strategy s, arena_t ar) {
+  allocate_using arena ar;
+  return rec(lambda (strategy self) -> s <+ one(self, ar), ar);
 }
 
-static inline strategy allTopDown(strategy s) {
-  return rec(lambda (strategy self) -> s <+ all(self));
+static inline strategy allTopDown(strategy s, arena_t ar) {
+  allocate_using arena ar;
+  return rec(lambda (strategy self) -> s <+ all(self, ar), ar);
 }
 
-static inline strategy innermost(strategy s) {
-  return rec(lambda (strategy self) -> bottomUp(try(s <* self)));
+static inline strategy innermost(strategy s, arena_t ar) {
+  allocate_using arena ar;
+  return rec(lambda (strategy self) -> bottomUp(try(s <* self, ar), ar), ar);
 }
 
-static inline strategy outermost(strategy s) {
-  return repeat(onceTopDown(s));
+static inline strategy outermost(strategy s, arena_t ar) {
+  allocate_using arena ar;
+  return repeat(onceTopDown(s, ar), ar);
 }
 
 #endif
