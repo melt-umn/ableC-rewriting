@@ -16,6 +16,5 @@ imports edu:umn:cs:melt:exts:ableC:templating:abstractsyntax;
 imports edu:umn:cs:melt:exts:ableC:constructor:abstractsyntax as ctor;
 imports edu:umn:cs:melt:exts:ableC:templateConstructor:abstractsyntax as ctor;
 imports edu:umn:cs:melt:exts:ableC:allocation:abstractsyntax;
-imports edu:umn:cs:melt:exts:ableC:vector:abstractsyntax;
 imports edu:umn:cs:melt:exts:ableC:closure:abstractsyntax;
 imports edu:umn:cs:melt:exts:ableC:prolog:list:abstractsyntax;

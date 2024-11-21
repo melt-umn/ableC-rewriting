@@ -8,7 +8,9 @@ int fn(float x, int y) {
 
 int main() {
   datatype Foo f = Foo(fn, 23);
-  if (!rewrite(one(rule (int) { i -> i + 1; }), f, NULL)) {
-    return 1;
+  with_arena ar {
+    if (!rewrite(one(rule (int) { i -> i + 1; }, ar), f, NULL)) {
+      return 1;
+    }
   }
 }
