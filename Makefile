@@ -31,6 +31,9 @@ USE_CUSTOM_SILVER=1
 
 JAVAFLAGS=-Xmx1G -Xss30M
 
+# Need to bump up the heap space to run the MWDA:
+export SVJVM_FLAGS=-Xmx6G -Xss30m
+
 # Path from current directory to top level ableC repository
 ABLEC_BASE?=../../ableC
 
